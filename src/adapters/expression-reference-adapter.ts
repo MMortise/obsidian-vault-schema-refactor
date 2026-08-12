@@ -10,7 +10,7 @@ export interface ExpressionMatch {
 }
 
 const identifierStart = /[\p{L}_$]/u;
-const identifierPart = /[\p{L}\p{N}_$]/u;
+const identifierPart = /[\p{L}\p{M}\p{N}_$]/u;
 
 function isBoundary(value: string | undefined): boolean {
   return value === undefined || !identifierPart.test(value);
@@ -21,7 +21,7 @@ function isPropertyTerminator(value: string | undefined): boolean {
 }
 
 export function isDotPropertyName(value: string): boolean {
-  return /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(value);
+  return /^[\p{L}_$][\p{L}\p{M}\p{N}_$]*$/u.test(value);
 }
 
 function skipLiteralOrComment(expression: string, index: number): number | undefined {

@@ -38,6 +38,15 @@ describe("expression adapter", () => {
     const expression = 'formula.real + "formula.string" + /formula.regex/ + total / formula.divisor // formula.line\n/* formula.block */';
     expect(scanFormulaReferences(expression)).toEqual(["real", "divisor"]);
   });
+
+  it("keeps Unicode combining marks in the same identifier", () => {
+    const decomposed = "e\u0301";
+    const expression = `note.${decomposed} == 1`;
+    const exact = scanExpression(expression).filter((match) => match.confidence === "exact");
+    expect(exact.map((match) => match.propertyName)).toEqual([decomposed]);
+    expect(replaceExactProperty(expression, "e", "letter").text).toBe(expression);
+    expect(replaceExactProperty(expression, decomposed, "accented").text).toBe("note.accented == 1");
+  });
 });
 
 describe("markdown adapter", () => {
