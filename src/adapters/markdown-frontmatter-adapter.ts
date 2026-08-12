@@ -1,5 +1,5 @@
 import { isMap, parseDocument, Scalar, type Document, type Pair } from "yaml";
-import { sha256 } from "../domain/hash";
+import { sha256, stableStringify } from "../domain/hash";
 import type { ChangeOperation, ConflictDecision, MarkdownDocument, SourceSnapshot, ValueKind } from "../domain/types";
 
 export interface MarkdownTransformResult {
@@ -88,7 +88,8 @@ export function parseMarkdown(snapshot: SourceSnapshot): Promise<MarkdownDocumen
 function mergeLists(target: unknown[], source: unknown[]): unknown[] {
   const merged = [...target];
   for (const item of source) {
-    if (!merged.some((existing) => JSON.stringify(existing) === JSON.stringify(item))) merged.push(item);
+    const fingerprint = stableStringify(item);
+    if (!merged.some((existing) => stableStringify(existing) === fingerprint)) merged.push(item);
   }
   return merged;
 }

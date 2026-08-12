@@ -77,6 +77,25 @@ describe("markdown adapter", () => {
     expect(result.afterText).toContain("  - one\n  - two\n  - three");
   });
 
+  it("deduplicates structurally equal list objects regardless of key order", async () => {
+    const input = [
+      "---",
+      "status:",
+      "  - a: 1",
+      "    b:",
+      "      c: 2",
+      "state:",
+      "  - b:",
+      "      c: 2",
+      "    a: 1",
+      "---",
+      ""
+    ].join("\n");
+    const result = await renameFrontmatterKey(input, "status", "state", "merge-lists");
+    expect(result.blockers).toEqual([]);
+    expect(result.afterText.match(/c: 2/g)).toHaveLength(1);
+  });
+
   it("preserves BOM and CRLF line endings", async () => {
     const input = "\uFEFF---\r\nstatus: active\r\nother: value\r\n---\r\nbody\r\n";
     const result = await renameFrontmatterKey(input, "status", "state", "block");
