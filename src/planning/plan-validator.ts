@@ -16,12 +16,18 @@ export async function checkPlanFreshness(vault: Vault, plan: ChangePlan): Promis
   const known = new Set(Object.keys(plan.sourceSnapshots));
   const files = vault.getFiles().filter((file) => file.extension === "md" || file.extension === "base");
   const byPath = new Map(files.map((file) => [file.path, file]));
-  for (const change of plan.fileChanges) {
-    const file = byPath.get(change.path);
-    if (!file) { missingPaths.push(change.path); continue; }
-    if (await sha256(await vault.cachedRead(file)) !== change.beforeHash) changedPaths.push(change.path);
-  }
-  if (plan.adapterVersion !== "restore-v1") {
+  if (plan.adapterVersion === "restore-v1") {
+    for (const change of plan.fileChanges) {
+      const file = byPath.get(change.path);
+      if (!file) { missingPaths.push(change.path); continue; }
+      if (await sha256(await vault.cachedRead(file)) !== change.beforeHash) changedPaths.push(change.path);
+    }
+  } else {
+    for (const [path, snapshot] of Object.entries(plan.sourceSnapshots)) {
+      const file = byPath.get(path);
+      if (!file) { missingPaths.push(path); continue; }
+      if (await sha256(await vault.cachedRead(file)) !== snapshot.contentHash) changedPaths.push(path);
+    }
     for (const file of files) {
       if (known.has(file.path)) continue;
       const text = await vault.cachedRead(file);
