@@ -202,6 +202,14 @@
 .schema-refactor-confirm__facts { border-bottom: 1px solid var(--sr-border); border-top: 1px solid var(--sr-border); margin: 14px 0; padding: 10px 0; }
 .schema-refactor-confirm__facts div { padding: 4px 0; }
 .schema-refactor-confirm .mod-cta { align-items: center; display: inline-flex; gap: 7px; }
+.schema-refactor-progress-modal__status { align-items: center; border-bottom: 1px solid var(--sr-border); border-top: 1px solid var(--sr-border); display: flex; gap: 12px; margin: 14px 0; padding: 14px 0; }
+.schema-refactor-progress-modal__status > span { align-items: center; display: flex; flex: 0 0 24px; justify-content: center; }
+.schema-refactor-progress-modal__status > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.schema-refactor-progress-modal__status strong { text-transform: capitalize; }
+.schema-refactor-progress-modal__status span { color: var(--text-muted); font-family: var(--font-monospace); font-size: 11px; overflow-wrap: anywhere; }
+.schema-refactor-progress-modal .lucide-loader-circle { animation: schema-refactor-spin 1s linear infinite; }
+
+@keyframes schema-refactor-spin { to { transform: rotate(360deg); } }
 
 @container (max-width: 640px) {
   .schema-refactor { padding: 14px 12px 32px; }

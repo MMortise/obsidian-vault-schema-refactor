@@ -1,4 +1,4 @@
-import type { TFile, Vault } from "obsidian";
+import type { Vault } from "obsidian";
 import { describe, expect, it } from "vitest";
 import { sha256 } from "../src/domain/hash";
 import type { ChangePlan } from "../src/domain/types";

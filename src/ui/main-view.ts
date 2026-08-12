@@ -6,6 +6,7 @@ import { createReport, reportToJson, reportToMarkdown } from "../report/report";
 import { ConfirmApplyModal } from "./confirm-modal";
 import type { TransactionManifest } from "../transaction/types";
 import { RefactorRequestState } from "./refactor-request-state";
+import { ApplyProgressModal } from "./apply-progress-modal";
 
 export const SCHEMA_REFACTOR_VIEW = "schema-refactor-view";
 type Tab = "refactor" | "doctor";
@@ -284,14 +285,24 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private async applyPlan(plan: ChangePlan): Promise<void> {
+    const progressModal = new ApplyProgressModal(this.app);
+    progressModal.open();
     this.busy = true; this.requestState.resultMessage = "Preparing transaction…"; this.render();
     try {
-      const result = await this.plugin.service.apply(plan, { onState: (state, path) => { this.requestState.resultMessage = `${state.replaceAll("_", " ")}${path ? ` · ${path}` : ""}`; this.render(); } });
+      const result = await this.plugin.service.apply(plan, { onState: (state, path) => {
+        progressModal.update(state, path);
+        this.requestState.resultMessage = `${state.replaceAll("_", " ")}${path ? ` · ${path}` : ""}`;
+        this.render();
+      } });
       this.requestState.resultMessage = result.state === "COMPLETED" ? `Completed and verified ${result.modifiedPaths.length} files.` : result.state === "ROLLED_BACK" ? "Apply failed. All changed files were restored." : `Rollback incomplete: ${result.rollbackIncompletePaths.join(", ")}. Snapshots were retained.`;
       this.history = await this.plugin.service.history();
       await this.plugin.service.pruneHistory(this.plugin.settings.snapshotRetention);
       new Notice(this.requestState.resultMessage, 8000);
-    } catch (error) { this.requestState.resultMessage = error instanceof Error ? error.message : "Apply failed."; new Notice(this.requestState.resultMessage, 8000); }
+    } catch (error) {
+      this.requestState.resultMessage = error instanceof Error ? error.message : "Apply failed.";
+      progressModal.fail(this.requestState.resultMessage);
+      new Notice(this.requestState.resultMessage, 8000);
+    }
     finally { this.busy = false; this.render(); }
   }
 
