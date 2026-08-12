@@ -242,6 +242,10 @@ export class SchemaRefactorView extends ItemView {
         const copy = row.createDiv();
         copy.createEl("strong", { text: item.message });
         copy.createEl("div", { cls: "schema-refactor__finding-meta", text: `${item.ruleId} · ${item.filePath || "Vault"}${item.structuralPath ? ` · ${item.structuralPath.join(" > ")}` : ""}` });
+        if (item.suggestedAction === "create-refactor" && item.refactorRequest) {
+          const refactor = this.iconButton(row, "Create refactor plan", "replace", false, true);
+          refactor.addEventListener("click", () => this.createRefactorFromFinding(item));
+        }
         if (item.filePath) { const open = this.iconButton(row, "Open file", "external-link", false, true); open.addEventListener("click", () => void this.openFile(item.filePath)); }
       }
     }
@@ -365,5 +369,15 @@ export class SchemaRefactorView extends ItemView {
     const file = this.app.vault.getFileByPath(path);
     if (!file) { new Notice(`File not found: ${path}`); return; }
     await this.app.workspace.getLeaf(false).openFile(file);
+  }
+
+  private createRefactorFromFinding(finding: Finding): void {
+    if (!finding.refactorRequest) return;
+    this.requestState.invalidateReview();
+    this.plugin.service.plan = undefined;
+    this.requestState.oldName = finding.refactorRequest.oldName;
+    this.requestState.newName = finding.refactorRequest.newName;
+    this.tab = "refactor";
+    this.render();
   }
 }

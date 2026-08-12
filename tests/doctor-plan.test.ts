@@ -39,6 +39,8 @@ describe("Doctor", () => {
     const rules = new Set(findings.map((item) => item.ruleId));
     expect(rules).toEqual(new Set(["UNPARSEABLE_BASE", "MISSING_PROPERTY", "MISSING_FORMULA", "UNUSED_FORMULA", "CASE_DRIFT", "TYPE_DRIFT"]));
     expect((await runDoctor(data)).map((item) => item.fingerprint)).toEqual(findings.map((item) => item.fingerprint));
+    expect(findings.find((item) => item.ruleId === "MISSING_PROPERTY")?.refactorRequest).toEqual({ oldName: "missing", newName: "" });
+    expect(findings.find((item) => item.ruleId === "CASE_DRIFT")?.refactorRequest).toEqual({ oldName: "Status", newName: "status" });
   });
 
   it("does not report formula references found only in literals or comments", async () => {

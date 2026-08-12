@@ -46,6 +46,7 @@ export interface Finding {
   evidence?: string;
   fingerprint: string;
   suggestedAction?: "create-refactor" | "open-file" | "manual-review";
+  refactorRequest?: { oldName: string; newName: string };
 }
 
 export type ConflictDecision = "block" | "keep-target" | "keep-source" | "merge-lists";
