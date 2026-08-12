@@ -18,7 +18,7 @@ describe("runtime settings", () => {
     };
     const snapshot = { path: "text.base", kind: "base" as const, text: "x-status-text", contentHash: "hash", mtime: 1, size: 13 };
     const inventory: InventoryResult = {
-      revision: "revision", snapshots: [snapshot], markdown: [], bases: [{ snapshot, references: [reference], formulaDefinitions: [], formulaUses: [], unknownShapes: [] }],
+      revision: "revision", snapshots: [snapshot], markdown: [], bases: [{ snapshot, references: [reference], formulaDefinitions: [], formulaRoots: [], formulaDependencies: {}, unknownShapes: [] }],
       propertyTypes: new Map(), references: [reference], errors: []
     };
     const request = { oldName: "status", newName: "state", defaultConflictDecision: "block" as const };

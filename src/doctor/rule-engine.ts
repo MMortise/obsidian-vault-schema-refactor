@@ -25,9 +25,10 @@ export async function runDoctor(inventory: InventoryResult): Promise<Finding[]> 
       }));
     }
     const definitions = new Set(base.formulaDefinitions);
-    const uses = new Set(base.formulaUses.filter(Boolean));
-    for (const name of uses) if (!definitions.has(name)) findings.push(await finding("MISSING_FORMULA", "error", base.snapshot.path, `Formula '${name}' is referenced but not defined.`, { evidence: `formula.${name}`, suggestedAction: "open-file" }));
-    if (base.unknownShapes.length === 0) for (const name of definitions) if (!uses.has(name)) findings.push(await finding("UNUSED_FORMULA", "info", base.snapshot.path, `Formula '${name}' is defined but not used by a known view.`, { evidence: name, suggestedAction: "open-file" }));
+    const allUses = new Set([...base.formulaRoots, ...Object.values(base.formulaDependencies).flat()].filter(Boolean));
+    for (const name of allUses) if (!definitions.has(name)) findings.push(await finding("MISSING_FORMULA", "error", base.snapshot.path, `Formula '${name}' is referenced but not defined.`, { evidence: `formula.${name}`, suggestedAction: "open-file" }));
+    const reachable = reachableFormulas(base.formulaRoots, base.formulaDependencies);
+    if (base.unknownShapes.length === 0) for (const name of definitions) if (!reachable.has(name)) findings.push(await finding("UNUSED_FORMULA", "info", base.snapshot.path, `Formula '${name}' is defined but not reachable from a known view or filter.`, { evidence: name, suggestedAction: "open-file" }));
   }
   const names = [...properties].sort();
   const caseGroups = new Map<string, string[]>();
@@ -50,6 +51,18 @@ export async function runDoctor(inventory: InventoryResult): Promise<Finding[]> 
   }
   const unique = new Map(findings.map((item) => [item.fingerprint, item]));
   return [...unique.values()].sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || a.filePath.localeCompare(b.filePath) || a.ruleId.localeCompare(b.ruleId));
+}
+
+export function reachableFormulas(roots: string[], dependencies: Record<string, string[]>): Set<string> {
+  const reachable = new Set<string>();
+  const pending = [...roots];
+  while (pending.length > 0) {
+    const name = pending.pop();
+    if (!name || reachable.has(name)) continue;
+    reachable.add(name);
+    pending.push(...(dependencies[name] ?? []));
+  }
+  return reachable;
 }
 
 function severityRank(severity: Severity): number {

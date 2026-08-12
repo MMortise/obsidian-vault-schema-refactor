@@ -9,7 +9,8 @@ interface Context {
   filePath: string;
   references: PropertyReference[];
   formulaDefinitions: string[];
-  formulaUses: string[];
+  formulaRoots: string[];
+  formulaDependencies: Record<string, string[]>;
   unknownShapes: BaseDocument["unknownShapes"];
 }
 
@@ -49,7 +50,7 @@ async function addReference(context: Context, reference: Omit<PropertyReference,
   context.references.push({ ...reference, id: (await sha256(`${reference.filePath}\0${reference.structuralPath.join("/")}\0${reference.propertyName}\0${reference.evidence}`)).slice(0, 20) });
 }
 
-async function scanExpressionScalar(node: Node, path: Array<string | number>, kind: SemanticKind, context: Context): Promise<void> {
+async function scanExpressionScalar(node: Node, path: Array<string | number>, kind: SemanticKind, context: Context, formulaOwner?: string): Promise<void> {
   if (isScalar(node) && typeof node.value === "string") {
     for (const match of scanExpression(node.value)) {
       await addReference(context, {
@@ -58,7 +59,9 @@ async function scanExpressionScalar(node: Node, path: Array<string | number>, ki
         range: { from: match.from, to: match.to }, evidence: evidence(match.evidence)
       });
     }
-    context.formulaUses.push(...scanFormulaReferences(node.value));
+    const formulaReferences = scanFormulaReferences(node.value);
+    if (formulaOwner) context.formulaDependencies[formulaOwner] = formulaReferences;
+    else context.formulaRoots.push(...formulaReferences);
   }
 }
 
@@ -88,7 +91,7 @@ async function scanPropertyIds(node: Node | null | undefined, path: Array<string
         syntaxForm: "serialized-property-id", propertyName: node.value.slice(5), confidence: "exact", evidence: node.value
       });
     }
-    if (node.value.startsWith("formula.")) context.formulaUses.push(node.value.slice(8));
+    if (node.value.startsWith("formula.")) context.formulaRoots.push(node.value.slice(8));
     return;
   }
   if (isSeq(node)) {
@@ -138,7 +141,10 @@ async function scanBaseDocument(document: Document, context: Context): Promise<v
         if (key !== undefined && section === "formulas") context.formulaDefinitions.push(key);
         const value = asNode(pair.value);
         if (key !== undefined && value !== undefined) {
-          if (isScalar(value) && typeof value.value === "string") await scanExpressionScalar(value, [section, key], section === "formulas" ? "base-formula" : "base-summary", context);
+          if (isScalar(value) && typeof value.value === "string") await scanExpressionScalar(
+            value, [section, key], section === "formulas" ? "base-formula" : "base-summary", context,
+            section === "formulas" ? key : undefined
+          );
           else context.unknownShapes.push(unknownShape([section, key], `${section} values must be expression strings`, value));
         }
       }
@@ -161,7 +167,7 @@ async function scanBaseDocument(document: Document, context: Context): Promise<v
 }
 
 export async function parseBase(snapshot: SourceSnapshot): Promise<BaseDocument> {
-  const context: Context = { filePath: snapshot.path, references: [], formulaDefinitions: [], formulaUses: [], unknownShapes: [] };
+  const context: Context = { filePath: snapshot.path, references: [], formulaDefinitions: [], formulaRoots: [], formulaDependencies: {}, unknownShapes: [] };
   try {
     const sourceText = snapshot.text.startsWith("\uFEFF") ? snapshot.text.slice(1) : snapshot.text;
     const document = parseDocument(sourceText, { keepSourceTokens: true, prettyErrors: false, strict: true, uniqueKeys: true });

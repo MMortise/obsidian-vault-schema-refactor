@@ -49,6 +49,22 @@ describe("Doctor", () => {
     expect(findings.some((item) => item.ruleId === "MISSING_FORMULA")).toBe(false);
   });
 
+  it("reports mutually dependent formulas as unused when no view reaches them", async () => {
+    const data = await inventory({}, {
+      "cycle.base": "formulas:\n  first: formula.second + 1\n  second: formula.first + 1\nviews:\n  - order: [file.name]\n"
+    });
+    const findings = await runDoctor(data);
+    expect(findings.filter((item) => item.ruleId === "UNUSED_FORMULA").map((item) => item.evidence).sort()).toEqual(["first", "second"]);
+  });
+
+  it("treats formulas transitively reached from a view as used", async () => {
+    const data = await inventory({}, {
+      "reachable.base": "formulas:\n  first: formula.second + 1\n  second: note.score + 1\nviews:\n  - order: [formula.first]\n"
+    });
+    const findings = await runDoctor(data);
+    expect(findings.some((item) => item.ruleId === "UNUSED_FORMULA")).toBe(false);
+  });
+
   it("exports matching private reports", async () => {
     const data = await inventory({}, { "a.base": "filters: note.missing == 1\n" });
     const report = createReport(await runDoctor(data), "0.1.0", "2026-08-12T00:00:00.000Z");

@@ -109,7 +109,8 @@ export interface BaseDocument {
   snapshot: SourceSnapshot;
   references: PropertyReference[];
   formulaDefinitions: string[];
-  formulaUses: string[];
+  formulaRoots: string[];
+  formulaDependencies: Record<string, string[]>;
   unknownShapes: Array<{ path: Array<string | number>; evidence: string; searchText?: string }>;
   parseError?: string;
 }
