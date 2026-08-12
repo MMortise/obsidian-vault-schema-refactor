@@ -120,4 +120,25 @@ describe("Bases adapter", () => {
     expect(result.blockers).toEqual([]);
     expect(result.afterText).toContain("note.project-status");
   });
+
+  it("reports and preserves unsupported filter subtrees", async () => {
+    const input = "filters:\n  pluginConfig: note.status\nviews:\n  - type: table\n";
+    const parsed = await parseBase(await snapshot("unknown-filter.base", "base", input));
+    expect(parsed.unknownShapes).toContainEqual(expect.objectContaining({ path: ["filters"] }));
+    expect(parsed.references).toEqual([]);
+    const result = await renameBaseReferences(input, "status", "state", "block");
+    expect(result.operations).toEqual([]);
+    expect(result.afterText).toContain("pluginConfig: note.status");
+    expect(result.afterText).not.toContain("note.state");
+  });
+
+  it("reports and preserves non-string formula values", async () => {
+    const input = "formulas:\n  pluginFormula:\n    expression: note.status\n";
+    const parsed = await parseBase(await snapshot("unknown-formula.base", "base", input));
+    expect(parsed.unknownShapes).toContainEqual(expect.objectContaining({ path: ["formulas", "pluginFormula"] }));
+    expect(parsed.references).toEqual([]);
+    const result = await renameBaseReferences(input, "status", "state", "block");
+    expect(result.operations).toEqual([]);
+    expect(result.afterText).toContain("expression: note.status");
+  });
 });

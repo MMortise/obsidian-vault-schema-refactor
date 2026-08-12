@@ -49,7 +49,7 @@ async function addReference(context: Context, reference: Omit<PropertyReference,
   context.references.push({ ...reference, id: (await sha256(`${reference.filePath}\0${reference.structuralPath.join("/")}\0${reference.propertyName}\0${reference.evidence}`)).slice(0, 20) });
 }
 
-async function scanExpressionNode(node: Node | null | undefined, path: Array<string | number>, kind: SemanticKind, context: Context): Promise<void> {
+async function scanExpressionScalar(node: Node, path: Array<string | number>, kind: SemanticKind, context: Context): Promise<void> {
   if (isScalar(node) && typeof node.value === "string") {
     for (const match of scanExpression(node.value)) {
       await addReference(context, {
@@ -59,18 +59,25 @@ async function scanExpressionNode(node: Node | null | undefined, path: Array<str
       });
     }
     context.formulaUses.push(...scanFormulaReferences(node.value));
+  }
+}
+
+async function scanFilterNode(node: Node | null | undefined, path: Array<string | number>, context: Context): Promise<void> {
+  if (node === undefined) return;
+  if (isScalar(node) && typeof node.value === "string") {
+    await scanExpressionScalar(node, path, "base-filter", context);
     return;
   }
-  if (isSeq(node)) {
-    for (let index = 0; index < node.items.length; index += 1) await scanExpressionNode(asNode(node.items[index]), [...path, index], kind, context);
-    return;
-  }
-  if (isMap(node)) {
-    for (const pair of node.items) {
-      const key = pairKey(pair);
-      if (key !== undefined) await scanExpressionNode(asNode(pair.value), [...path, key], kind, context);
+  if (isMap(node) && node.items.length === 1) {
+    const pair = node.items[0];
+    const key = pair ? pairKey(pair) : undefined;
+    const children = pair ? asNode(pair.value) : undefined;
+    if (key !== undefined && ["and", "or", "not"].includes(key) && isSeq(children)) {
+      for (let index = 0; index < children.items.length; index += 1) await scanFilterNode(asNode(children.items[index]), [...path, key, index], context);
+      return;
     }
   }
+  context.unknownShapes.push(unknownShape(path, "filter must be an expression string or a single and/or/not array", node));
 }
 
 async function scanPropertyIds(node: Node | null | undefined, path: Array<string | number>, kind: SemanticKind, context: Context): Promise<void> {
@@ -112,7 +119,7 @@ async function scanBaseDocument(document: Document, context: Context): Promise<v
     const key = pairKey(pair);
     if (key !== undefined && !known.has(key)) context.unknownShapes.push(unknownShape([key], `Unknown top-level field: ${key}`));
   }
-  await scanExpressionNode(mapValue(root, "filters"), ["filters"], "base-filter", context);
+  await scanFilterNode(mapValue(root, "filters"), ["filters"], context);
   const properties = mapValue(root, "properties");
   if (isMap(properties)) {
     for (const pair of properties.items) {
@@ -129,7 +136,11 @@ async function scanBaseDocument(document: Document, context: Context): Promise<v
       for (const pair of node.items) {
         const key = pairKey(pair);
         if (key !== undefined && section === "formulas") context.formulaDefinitions.push(key);
-        if (key !== undefined) await scanExpressionNode(asNode(pair.value), [section, key], section === "formulas" ? "base-formula" : "base-summary", context);
+        const value = asNode(pair.value);
+        if (key !== undefined && value !== undefined) {
+          if (isScalar(value) && typeof value.value === "string") await scanExpressionScalar(value, [section, key], section === "formulas" ? "base-formula" : "base-summary", context);
+          else context.unknownShapes.push(unknownShape([section, key], `${section} values must be expression strings`, value));
+        }
       }
     } else if (node !== undefined) context.unknownShapes.push(unknownShape([section], `${section} must be a mapping`, node));
   }
@@ -142,7 +153,7 @@ async function scanBaseDocument(document: Document, context: Context): Promise<v
   for (let index = 0; index < views.items.length; index += 1) {
     const view = views.items[index];
     if (!isMap(view)) { context.unknownShapes.push(unknownShape(["views", index], "view must be a mapping", asNode(view))); continue; }
-    await scanExpressionNode(mapValue(view, "filters"), ["views", index, "filters"], "base-filter", context);
+    await scanFilterNode(mapValue(view, "filters"), ["views", index, "filters"], context);
     await scanPropertyIds(mapValue(view, "order"), ["views", index, "order"], "view-order", context);
     await scanPropertyIds(mapValue(view, "sort"), ["views", index, "sort"], "view-sort", context);
     await scanPropertyIds(mapValue(view, "groupBy"), ["views", index, "groupBy"], "view-group", context);
@@ -162,7 +173,7 @@ export async function parseBase(snapshot: SourceSnapshot): Promise<BaseDocument>
   }
 }
 
-function transformScalarExpressions(node: Node | null | undefined, oldName: string, newName: string, path: Array<string | number>, kind: SemanticKind, operations: ChangeOperation[]): void {
+function transformExpressionScalar(node: Node | null | undefined, oldName: string, newName: string, path: Array<string | number>, kind: SemanticKind, operations: ChangeOperation[]): void {
   if (isScalar(node) && typeof node.value === "string") {
     const result = replaceExactProperty(node.value, oldName, newName);
     if (result.replacements.length > 0) {
@@ -171,15 +182,35 @@ function transformScalarExpressions(node: Node | null | undefined, oldName: stri
     }
     return;
   }
-  if (isSeq(node)) node.items.forEach((item, index) => transformScalarExpressions(asNode(item), oldName, newName, [...path, index], kind, operations));
-  else if (isMap(node)) node.items.forEach((pair) => { const key = pairKey(pair); if (key !== undefined) transformScalarExpressions(asNode(pair.value), oldName, newName, [...path, key], kind, operations); });
+}
+
+function transformFilterNode(node: Node | null | undefined, oldName: string, newName: string, path: Array<string | number>, operations: ChangeOperation[]): void {
+  if (isScalar(node) && typeof node.value === "string") {
+    transformExpressionScalar(node, oldName, newName, path, "base-filter", operations);
+    return;
+  }
+  if (!isMap(node) || node.items.length !== 1) return;
+  const pair = node.items[0];
+  const key = pair ? pairKey(pair) : undefined;
+  const children = pair ? asNode(pair.value) : undefined;
+  if (key === undefined || !["and", "or", "not"].includes(key) || !isSeq(children)) return;
+  children.items.forEach((item, index) => transformFilterNode(asNode(item), oldName, newName, [...path, key, index], operations));
 }
 
 function hasExactExpressionReference(node: Node | null | undefined, oldName: string): boolean {
   if (isScalar(node) && typeof node.value === "string") return scanExpression(node.value).some((match) => match.confidence === "exact" && match.propertyName === oldName);
-  if (isSeq(node)) return node.items.some((item) => hasExactExpressionReference(asNode(item), oldName));
-  if (isMap(node)) return node.items.some((pair) => hasExactExpressionReference(asNode(pair.value), oldName));
   return false;
+}
+
+function hasExactFilterReference(node: Node | null | undefined, oldName: string): boolean {
+  if (hasExactExpressionReference(node, oldName)) return true;
+  if (!isMap(node) || node.items.length !== 1) return false;
+  const pair = node.items[0];
+  const key = pair ? pairKey(pair) : undefined;
+  const children = pair ? asNode(pair.value) : undefined;
+  return key !== undefined && ["and", "or", "not"].includes(key) && isSeq(children)
+    ? children.items.some((item) => hasExactFilterReference(asNode(item), oldName))
+    : false;
 }
 
 function transformPropertyIds(node: Node | null | undefined, oldId: string, newId: string, path: Array<string | number>, kind: SemanticKind, operations: ChangeOperation[]): void {
@@ -201,18 +232,26 @@ export async function renameBaseReferences(text: string, oldName: string, newNam
     return { afterText: text, afterHash: await sha256(text), operations, blockers };
   }
   const root = document.contents;
-  const expressionRoots: Array<Node | null | undefined> = [mapValue(root, "filters")];
-  for (const section of ["formulas", "summaries"] as const) expressionRoots.push(mapValue(root, section));
+  const expressionScalars: Array<Node | null | undefined> = [];
+  for (const section of ["formulas", "summaries"] as const) {
+    const sectionNode = mapValue(root, section);
+    if (isMap(sectionNode)) sectionNode.items.forEach((pair) => expressionScalars.push(asNode(pair.value)));
+  }
   const viewsForValidation = mapValue(root, "views");
-  if (isSeq(viewsForValidation)) for (const view of viewsForValidation.items) if (isMap(view)) expressionRoots.push(mapValue(view, "filters"));
-  if (!isDotPropertyName(newName) && expressionRoots.some((node) => hasExactExpressionReference(node, oldName))) {
+  const filterRoots: Array<Node | null | undefined> = [mapValue(root, "filters")];
+  if (isSeq(viewsForValidation)) for (const view of viewsForValidation.items) if (isMap(view)) filterRoots.push(mapValue(view, "filters"));
+  if (!isDotPropertyName(newName) && (expressionScalars.some((node) => hasExactExpressionReference(node, oldName)) || filterRoots.some((node) => hasExactFilterReference(node, oldName)))) {
     blockers.push(`Property '${newName}' has no verified dot-access expression syntax. Expression references require manual review.`);
     return { afterText: text, afterHash: await sha256(text), operations, blockers };
   }
-  transformScalarExpressions(mapValue(root, "filters"), oldName, newName, ["filters"], "base-filter", operations);
+  transformFilterNode(mapValue(root, "filters"), oldName, newName, ["filters"], operations);
   for (const section of ["formulas", "summaries"] as const) {
     const node = mapValue(root, section);
-    if (isMap(node)) node.items.forEach((pair) => { const key = pairKey(pair); if (key !== undefined) transformScalarExpressions(asNode(pair.value), oldName, newName, [section, key], section === "formulas" ? "base-formula" : "base-summary", operations); });
+    if (isMap(node)) node.items.forEach((pair) => {
+      const key = pairKey(pair);
+      const value = asNode(pair.value);
+      if (key !== undefined && isScalar(value) && typeof value.value === "string") transformExpressionScalar(value, oldName, newName, [section, key], section === "formulas" ? "base-formula" : "base-summary", operations);
+    });
   }
   const properties = mapValue(root, "properties");
   const oldId = `note.${oldName}`;
@@ -238,7 +277,7 @@ export async function renameBaseReferences(text: string, oldName: string, newNam
   const views = mapValue(root, "views");
   if (isSeq(views)) views.items.forEach((view, index) => {
     if (!isMap(view)) return;
-    transformScalarExpressions(mapValue(view, "filters"), oldName, newName, ["views", index, "filters"], "base-filter", operations);
+    transformFilterNode(mapValue(view, "filters"), oldName, newName, ["views", index, "filters"], operations);
     transformPropertyIds(mapValue(view, "order"), oldId, newId, ["views", index, "order"], "view-order", operations);
     transformPropertyIds(mapValue(view, "sort"), oldId, newId, ["views", index, "sort"], "view-sort", operations);
     transformPropertyIds(mapValue(view, "groupBy"), oldId, newId, ["views", index, "groupBy"], "view-group", operations);
