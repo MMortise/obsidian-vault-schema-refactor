@@ -25,7 +25,12 @@ function sourceRecord(snapshots: SourceSnapshot[]): ChangePlan["sourceSnapshots"
   return Object.fromEntries(snapshots.map(({ path, contentHash, mtime, size }) => [path, { contentHash, mtime, size }]));
 }
 
-export async function buildRenamePlan(inventory: InventoryResult, input: RenamePropertyRequest, now = new Date().toISOString()): Promise<ChangePlan> {
+export async function buildRenamePlan(
+  inventory: InventoryResult,
+  input: RenamePropertyRequest,
+  now = new Date().toISOString(),
+  readText?: (path: string) => Promise<string>
+): Promise<ChangePlan> {
   const request: RenamePropertyRequest = {
     oldName: input.oldName, newName: input.newName, defaultConflictDecision: input.defaultConflictDecision,
     ...(input.conflictDecisions ? { conflictDecisions: Object.fromEntries(Object.entries(input.conflictDecisions).sort(([a], [b]) => a.localeCompare(b))) } : {}),
@@ -43,10 +48,21 @@ export async function buildRenamePlan(inventory: InventoryResult, input: RenameP
       exclusions.push({ path: markdown.snapshot.path, remainingReferences: 1 });
       continue;
     }
-    const result = await renameFrontmatterKey(markdown.snapshot.text, request.oldName, request.newName, decisionFor(request, markdown.snapshot.path));
+    const beforeText = markdown.snapshot.text !== "" || markdown.snapshot.size === 0
+      ? markdown.snapshot.text
+      : readText ? await readText(markdown.snapshot.path) : undefined;
+    if (beforeText === undefined) {
+      unresolvedFindings.push(await planFinding("SOURCE_NOT_LOADED", markdown.snapshot.path, "The source file must be reread before planning."));
+      continue;
+    }
+    if (await sha256(beforeText) !== markdown.snapshot.contentHash) {
+      unresolvedFindings.push(await planFinding("STALE_SOURCE", markdown.snapshot.path, "The source file changed after the inventory scan. Rescan before planning."));
+      continue;
+    }
+    const result = await renameFrontmatterKey(beforeText, request.oldName, request.newName, decisionFor(request, markdown.snapshot.path));
     for (const blocker of result.blockers) unresolvedFindings.push(await planFinding("MARKDOWN_CONFLICT", markdown.snapshot.path, blocker));
-    if (result.afterText !== markdown.snapshot.text && result.blockers.length === 0) fileChanges.push({
-      path: markdown.snapshot.path, kind: "markdown", beforeHash: markdown.snapshot.contentHash, beforeText: markdown.snapshot.text,
+    if (result.afterText !== beforeText && result.blockers.length === 0) fileChanges.push({
+      path: markdown.snapshot.path, kind: "markdown", beforeHash: markdown.snapshot.contentHash, beforeText,
       afterText: result.afterText, afterHash: result.afterHash, operations: result.operations, validation: { valid: true, warnings: [], blockers: [] }
     });
   }

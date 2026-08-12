@@ -32,10 +32,11 @@ export class VaultInventory {
         try {
           const text = await this.vault.cachedRead(file);
           const snapshot = await createSnapshot(file, text);
-          snapshots.push(snapshot);
           if (snapshot.kind === "markdown") {
             const parsed = await parseMarkdown(snapshot);
-            markdown.push(parsed);
+            const metadataSnapshot = { ...snapshot, text: "" };
+            snapshots.push(metadataSnapshot);
+            markdown.push({ ...parsed, snapshot: metadataSnapshot });
             definitions += parsed.properties.size;
             if (parsed.parseError) errors.push({ path: file.path, message: parsed.parseError });
             for (const [name, kind] of parsed.properties) {
@@ -44,6 +45,7 @@ export class VaultInventory {
               propertyTypes.set(name, kinds);
             }
           } else {
+            snapshots.push(snapshot);
             const parsed = await parseBase(snapshot);
             bases.push(parsed);
             exactReferences += parsed.references.filter((reference) => reference.confidence === "exact").length;

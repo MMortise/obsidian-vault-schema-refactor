@@ -40,7 +40,11 @@ export class SchemaRefactorService {
 
   async createPlan(request: RenamePropertyRequest): Promise<ChangePlan> {
     const inventory = this.inventory ?? await this.scan();
-    this.plan = await buildRenamePlan(inventory, request);
+    this.plan = await buildRenamePlan(inventory, request, new Date().toISOString(), async (path) => {
+      const file = this.app.vault.getFileByPath(path);
+      if (!file) throw new Error(`Vault file is missing: ${path}`);
+      return this.app.vault.cachedRead(file);
+    });
     return this.plan;
   }
 
