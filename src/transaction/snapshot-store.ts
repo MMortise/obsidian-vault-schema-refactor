@@ -23,16 +23,28 @@ export class SnapshotStore {
   async create(transactionId: string, plan: ChangePlan): Promise<TransactionManifest> {
     const directory = this.transactionPath(transactionId);
     await this.ensureDirectory(`${directory}/files`);
-    const entries: SnapshotEntry[] = [];
-    for (const change of plan.fileChanges) {
-      const snapshotFile = `${await sha256(change.path)}.txt`;
-      await this.adapter.write(`${directory}/files/${snapshotFile}`, change.beforeText);
-      if (await sha256(await this.adapter.read(`${directory}/files/${snapshotFile}`)) !== change.beforeHash) throw new Error(`Snapshot verification failed: ${change.path}`);
-      entries.push({ path: change.path, snapshotFile, beforeHash: change.beforeHash, afterHash: change.afterHash, byteLength: new TextEncoder().encode(change.beforeText).length, written: false, rollbackRestored: false });
-    }
+    const entries: SnapshotEntry[] = await Promise.all(plan.fileChanges.map(async (change) => ({
+      path: change.path, snapshotFile: `${await sha256(change.path)}.txt`, beforeHash: change.beforeHash, afterHash: change.afterHash,
+      byteLength: new TextEncoder().encode(change.beforeText).length, snapshotted: false, written: false, rollbackRestored: false
+    })));
     const now = new Date().toISOString();
     const manifest: TransactionManifest = { schemaVersion: 1, transactionId, planId: plan.planId, createdAt: now, updatedAt: now, state: "SNAPSHOTTING", request: plan.request, entries, verified: [], errors: [] };
     await this.save(manifest);
+    for (let index = 0; index < plan.fileChanges.length; index += 1) {
+      const change = plan.fileChanges[index];
+      const entry = entries[index];
+      if (!change || !entry) continue;
+      try {
+        await this.adapter.write(`${directory}/files/${entry.snapshotFile}`, change.beforeText);
+        if (await sha256(await this.adapter.read(`${directory}/files/${entry.snapshotFile}`)) !== change.beforeHash) throw new Error(`Snapshot verification failed: ${change.path}`);
+        entry.snapshotted = true;
+        await this.save(manifest);
+      } catch (error) {
+        manifest.errors.push({ stage: "SNAPSHOTTING", message: error instanceof Error ? error.message : "Unknown snapshot error", path: change.path });
+        await this.save(manifest);
+        return manifest;
+      }
+    }
     return manifest;
   }
 

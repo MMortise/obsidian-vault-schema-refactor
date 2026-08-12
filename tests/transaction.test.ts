@@ -16,9 +16,10 @@ class MemoryFiles implements TransactionFileStore {
 class MemoryAdapter {
   readonly files = new Map<string, string>();
   readonly folders = new Set<string>();
+  failWritePath: string | undefined;
   async exists(path: string): Promise<boolean> { return this.files.has(path) || this.folders.has(path); }
   async mkdir(path: string): Promise<void> { this.folders.add(path); }
-  async write(path: string, text: string): Promise<void> { this.files.set(path, text); }
+  async write(path: string, text: string): Promise<void> { if (path === this.failWritePath) throw new Error("snapshot disk failure"); this.files.set(path, text); }
   async read(path: string): Promise<string> { const value = this.files.get(path); if (value === undefined) throw new Error(`Missing ${path}`); return value; }
   async remove(path: string): Promise<void> { this.files.delete(path); }
   async rename(from: string, to: string): Promise<void> { const value = await this.read(from); this.files.set(to, value); this.files.delete(from); }
@@ -163,5 +164,18 @@ describe("TransactionExecutor", () => {
     adapter.files.set(`${root}/manifest.tmp.json`, serialized);
     adapter.files.set(`${root}/manifest.json`, "{corrupt");
     expect((await snapshots.load(manifest.transactionId)).transactionId).toBe(manifest.transactionId);
+  });
+
+  it("persists a discoverable journal when snapshot creation fails partway", async () => {
+    const data = await plan();
+    const { adapter, files, snapshots } = setup(data);
+    const executor = new TransactionExecutor(files, snapshots, () => "00000000-0000-4000-8000-000000000000");
+    adapter.failWritePath = `.plugin/snapshots/00000000-0000-4000-8000-000000000000/files/${await sha256("b.md")}.txt`;
+    const result = await executor.execute(data);
+    expect(result.state).toBe("ROLLED_BACK");
+    const history = await snapshots.list();
+    expect(history).toHaveLength(1);
+    expect(history[0]?.entries.map((entry) => entry.snapshotted)).toEqual([true, false]);
+    expect(history[0]?.entries.some((entry) => entry.written)).toBe(false);
   });
 });

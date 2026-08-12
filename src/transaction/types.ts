@@ -10,6 +10,7 @@ export interface SnapshotEntry {
   beforeHash: string;
   afterHash: string;
   byteLength: number;
+  snapshotted: boolean;
   written: boolean;
   writtenHash?: string;
   rollbackRestored: boolean;

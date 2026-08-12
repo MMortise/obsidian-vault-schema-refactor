@@ -7,13 +7,17 @@ import type { TransactionFileStore, TransactionHooks, TransactionManifest, Trans
 export class TransactionExecutor {
   private active = false;
 
-  constructor(private readonly files: TransactionFileStore, private readonly snapshots: SnapshotStore) {}
+  constructor(
+    private readonly files: TransactionFileStore,
+    private readonly snapshots: SnapshotStore,
+    private readonly createTransactionId: () => string = () => crypto.randomUUID()
+  ) {}
 
   async execute(plan: ChangePlan, hooks: TransactionHooks = {}): Promise<TransactionResult> {
     if (this.active) throw new Error("Another Schema Refactor transaction is already running.");
     if (plan.status !== "ready" || plan.fileChanges.length === 0) throw new Error("Only a non-empty ready plan can be applied.");
     this.active = true;
-    const transactionId = crypto.randomUUID();
+    const transactionId = this.createTransactionId();
     let manifest: TransactionManifest | undefined;
     let stage: TransactionState = "PREPARING";
     try {
@@ -26,6 +30,8 @@ export class TransactionExecutor {
       hooks.onState?.(stage);
       await hooks.injectFailure?.("before-snapshot-manifest");
       manifest = await this.snapshots.create(transactionId, plan);
+      const incompleteSnapshot = manifest.entries.find((entry) => !entry.snapshotted);
+      if (incompleteSnapshot) throw new Error(`Snapshot creation failed: ${incompleteSnapshot.path}`);
       await hooks.injectFailure?.("after-snapshot-manifest");
       stage = "WRITING";
       await this.snapshots.updateState(manifest, stage);

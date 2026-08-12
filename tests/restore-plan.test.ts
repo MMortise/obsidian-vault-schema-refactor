@@ -27,8 +27,8 @@ describe("restore plan", () => {
       remove: async () => undefined, rename: async () => undefined, list: async () => ({ files: [], folders: [] })
     } as unknown as DataAdapter;
     const snapshots = new SnapshotStore(adapter, ".snapshots");
-    const entryA = { path: "a.md", snapshotFile: `${await sha256("a.md")}.txt`, beforeHash: await sha256(beforeA), afterHash: await sha256(afterA), byteLength: beforeA.length, written: true, rollbackRestored: false };
-    const entryB = { path: "b.md", snapshotFile: `${await sha256("b.md")}.txt`, beforeHash: await sha256(beforeB), afterHash: await sha256(afterB), byteLength: beforeB.length, written: true, rollbackRestored: false };
+    const entryA = { path: "a.md", snapshotFile: `${await sha256("a.md")}.txt`, beforeHash: await sha256(beforeA), afterHash: await sha256(afterA), byteLength: beforeA.length, snapshotted: true, written: true, rollbackRestored: false };
+    const entryB = { path: "b.md", snapshotFile: `${await sha256("b.md")}.txt`, beforeHash: await sha256(beforeB), afterHash: await sha256(afterB), byteLength: beforeB.length, snapshotted: true, written: true, rollbackRestored: false };
     adapterFiles.set(`.snapshots/deadbeef/files/${entryA.snapshotFile}`, beforeA);
     adapterFiles.set(`.snapshots/deadbeef/files/${entryB.snapshotFile}`, beforeB);
     const manifest: TransactionManifest = { schemaVersion: 1, transactionId: "deadbeef", planId: "plan", createdAt: "2026-08-12T00:00:00Z", updatedAt: "2026-08-12T00:00:00Z", state: "COMPLETED", request: { oldName: "status", newName: "state", defaultConflictDecision: "block" }, entries: [entryA, entryB], verified: ["a.md", "b.md"], errors: [] };
