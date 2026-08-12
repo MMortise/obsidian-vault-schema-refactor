@@ -1,7 +1,7 @@
 {
   "id": "schema-refactor",
   "name": "Schema Refactor",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minAppVersion": "1.9.0",
   "description": "Safely rename properties across Markdown frontmatter and Bases references.",
   "author": "Schema Refactor contributors",

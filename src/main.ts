@@ -33,7 +33,6 @@ export default class SchemaRefactorPlugin extends Plugin {
 
   async setLanguage(language: Language): Promise<void> {
     this.settings.language = language;
-    await this.saveSettings();
     const t = createTranslator(language);
     if (this.ribbonIcon) setTooltip(this.ribbonIcon, t("openApp"));
     if (this.openCommand) this.openCommand.name = t("openApp");
@@ -41,6 +40,7 @@ export default class SchemaRefactorPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(SCHEMA_REFACTOR_VIEW)) {
       if (leaf.view instanceof SchemaRefactorView) leaf.view.refreshLanguage();
     }
+    await this.saveSettings();
   }
 
   async activateView(): Promise<void> {

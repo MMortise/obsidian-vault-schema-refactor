@@ -65,10 +65,10 @@ export class SchemaRefactorView extends ItemView {
     const oldInput = oldField.createEl("input", { type: "text", value: this.requestState.oldName, attr: { list: "schema-refactor-properties", autocomplete: "off" } });
     const dataList = oldField.createEl("datalist", { attr: { id: "schema-refactor-properties" } });
     known.forEach((name) => dataList.createEl("option", { value: name }));
-    oldInput.addEventListener("input", () => { this.requestState.setOldName(oldInput.value); this.plugin.service.plan = undefined; this.render(); });
+    oldInput.addEventListener("input", () => { this.requestState.setOldName(oldInput.value); this.invalidateRenderedPlan(); });
     const newField = this.field(form, t("newProperty"), t("newPropertyHint"));
     const newInput = newField.createEl("input", { type: "text", value: this.requestState.newName });
-    newInput.addEventListener("input", () => { this.requestState.setNewName(newInput.value); this.plugin.service.plan = undefined; this.render(); });
+    newInput.addEventListener("input", () => { this.requestState.setNewName(newInput.value); this.invalidateRenderedPlan(); });
     const conflictField = this.field(form, t("conflictPrompt"), t("conflictHint"));
     const select = conflictField.createEl("select");
     const conflictOptions: Array<[ConflictDecision, string]> = [["block", t("conflictBlock")], ["keep-target", t("conflictKeepTarget")], ["keep-source", t("conflictKeepSource")], ["merge-lists", t("conflictMergeLists")]];
@@ -280,6 +280,14 @@ export class SchemaRefactorView extends ItemView {
     const item = parent.createDiv();
     item.createEl("strong", { text: value });
     item.createSpan({ text: label });
+  }
+
+  private invalidateRenderedPlan(): void {
+    this.plugin.service.plan = undefined;
+    this.contentEl.querySelector(".schema-refactor__review")?.remove();
+    this.contentEl.querySelector(".schema-refactor__result")?.remove();
+    const steps = this.contentEl.querySelectorAll(".schema-refactor__steps > div");
+    for (let index = 2; index < steps.length; index += 1) steps[index]?.classList.remove("is-complete");
   }
 
   private async scanAndPlan(): Promise<void> {

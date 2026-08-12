@@ -151,5 +151,7 @@ export const zhCN = {
   lowResourceModeHint: "在大型 Vault 或资源受限设备上降低扫描并发。",
   includeTypeStats: "在 JSON 报告中包含类型统计",
   includeTypeStatsHint: "报告只包含类型名称，永不包含属性值。",
-  snapshotPrivacy: "快照存储在 {path}。Schema Refactor 不会通过网络发送 Vault 数据。"
+  snapshotPrivacy: "快照存储在 {path}。Schema Refactor 不会通过网络发送 Vault 数据。",
+  repository: "代码仓库",
+  version: "版本"
 } as const satisfies Record<keyof typeof en, string>;

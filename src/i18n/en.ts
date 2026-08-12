@@ -149,5 +149,7 @@ export const en = {
   lowResourceModeHint: "Use lower scan concurrency on large or resource-constrained devices.",
   includeTypeStats: "Include type statistics in JSON reports",
   includeTypeStatsHint: "Reports include only type names, never property values.",
-  snapshotPrivacy: "Snapshots are stored under {path}. Schema Refactor does not send Vault data over the network."
+  snapshotPrivacy: "Snapshots are stored under {path}. Schema Refactor does not send Vault data over the network.",
+  repository: "Code repository",
+  version: "Version"
 } as const;
