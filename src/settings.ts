@@ -42,7 +42,23 @@ export class SchemaRefactorSettingTab extends PluginSettingTab {
         this.renderSettings();
         await saved;
       }));
-    new Setting(this.containerEl).setName(t("snapshotRetention")).setDesc(t("snapshotRetentionHint")).addSlider((slider) => slider.setLimits(1, 100, 1).setValue(this.plugin.settings.snapshotRetention).onChange(async (value) => { this.plugin.settings.snapshotRetention = value; await this.plugin.saveSettings(); }));
+    const retention = new Setting(this.containerEl).setName(t("snapshotRetention")).setDesc(t("snapshotRetentionHint"));
+    retention.addSlider((slider) => {
+      slider.setLimits(1, 100, 1).setValue(this.plugin.settings.snapshotRetention);
+      const supportsInlineValue = typeof slider.setDisplayFormat === "function";
+      if (supportsInlineValue) slider.setDisplayFormat(String);
+      const fallbackValue = supportsInlineValue ? undefined : retention.controlEl.createEl("output", {
+        cls: "schema-refactor-setting-value",
+        text: String(this.plugin.settings.snapshotRetention),
+        attr: { "aria-live": "polite" }
+      });
+      slider.sliderEl.addEventListener("input", () => { if (fallbackValue) fallbackValue.textContent = slider.sliderEl.value; });
+      slider.onChange(async (nextValue) => {
+        if (fallbackValue) fallbackValue.textContent = String(nextValue);
+        this.plugin.settings.snapshotRetention = nextValue;
+        await this.plugin.saveSettings();
+      });
+    });
     new Setting(this.containerEl).setName(t("scanAfterStartup")).setDesc(t("scanAfterStartupHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.scanOnStartup).onChange(async (value) => { this.plugin.settings.scanOnStartup = value; await this.plugin.saveSettings(); }));
     new Setting(this.containerEl).setName(t("showTextMatches")).setDesc(t("showTextMatchesHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.showTextMatches).onChange(async (value) => { this.plugin.settings.showTextMatches = value; await this.plugin.saveSettings(); }));
     new Setting(this.containerEl).setName(t("lowResourceMode")).setDesc(t("lowResourceModeHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.lowResourceMode).onChange(async (value) => { this.plugin.settings.lowResourceMode = value; await this.plugin.saveSettings(); }));
