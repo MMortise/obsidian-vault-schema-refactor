@@ -67,6 +67,5 @@ export class SchemaRefactorSettingTab extends PluginSettingTab {
     const repository = document.createDocumentFragment();
     repository.createEl("a", { text: REPOSITORY_URL, href: REPOSITORY_URL, attr: { target: "_blank", rel: "noopener" } });
     new Setting(this.containerEl).setName(t("repository")).setDesc(repository);
-    new Setting(this.containerEl).setName(t("version")).setDesc(this.plugin.manifest.version);
   }
 }

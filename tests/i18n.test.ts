@@ -45,7 +45,6 @@ describe("i18n", () => {
     expect(zh("language")).toBe("语言");
     expect(zh("filesWillChange", { count: 3 })).toBe("将修改 3 个文件");
     expect(zh("repository")).toBe("代码仓库");
-    expect(zh("version")).toBe("版本");
   });
 
   it("translates every transaction state", () => {
