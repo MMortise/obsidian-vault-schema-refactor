@@ -3,6 +3,7 @@ import { parseBase } from "../src/adapters/bases-config-adapter";
 import { parseMarkdown } from "../src/adapters/markdown-frontmatter-adapter";
 import { runDoctor } from "../src/doctor/rule-engine";
 import { sha256 } from "../src/domain/hash";
+import { normalizePropertyNameForComparison } from "../src/domain/property-name";
 import type { BaseDocument, InventoryResult, MarkdownDocument, SourceSnapshot, ValueKind } from "../src/domain/types";
 import { buildRenamePlan, validatePlannedOutputs } from "../src/planning/plan-builder";
 import { createReport, reportToJson, reportToMarkdown } from "../src/report/report";
@@ -47,6 +48,22 @@ describe("Doctor", () => {
     const data = await inventory({}, { "formulas.base": "formulas:\n  shown: '\"formula.missing\" + 1 // formula.alsoMissing'\nviews:\n  - order: [formula.shown]\n" });
     const findings = await runDoctor(data);
     expect(findings.some((item) => item.ruleId === "MISSING_FORMULA")).toBe(false);
+  });
+
+  it("uses locale-independent case normalization for Turkish-sensitive names", async () => {
+    expect(normalizePropertyNameForComparison("I")).toBe("i");
+    expect(normalizePropertyNameForComparison("i")).toBe("i");
+    expect(normalizePropertyNameForComparison("\u0131")).toBe("\u0131");
+
+    const data = await inventory({
+      "upper.md": "---\nI: upper\n---\n",
+      "lower.md": "---\ni: lower\n---\n",
+      "dotless.md": "---\n\u0131: dotless\n---\n"
+    }, {});
+    const caseDrift = (await runDoctor(data)).filter((item) => item.ruleId === "CASE_DRIFT");
+    expect(caseDrift).toHaveLength(1);
+    expect(caseDrift[0]?.refactorRequest).toEqual({ oldName: "I", newName: "i" });
+    expect(caseDrift[0]?.evidence).toBe("I, i");
   });
 
   it("reports mutually dependent formulas as unused when no view reaches them", async () => {

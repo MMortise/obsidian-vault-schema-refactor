@@ -4,8 +4,13 @@ export interface PropertyNameValidation {
   error?: string;
 }
 
+// Unicode default lowercasing is locale-independent; NFC keeps canonically equivalent names comparable.
+export function normalizePropertyNameForComparison(raw: string): string {
+  return raw.normalize("NFC").toLowerCase().normalize("NFC");
+}
+
 export function validatePropertyName(raw: string): PropertyNameValidation {
-  const normalizedForComparison = raw.normalize("NFC").toLocaleLowerCase();
+  const normalizedForComparison = normalizePropertyNameForComparison(raw);
   if (raw.length === 0) return { valid: false, normalizedForComparison, error: "Property name is required." };
   if (raw.trim() !== raw) return { valid: false, normalizedForComparison, error: "Property names cannot start or end with whitespace." };
   if (/\p{Cc}/u.test(raw)) return { valid: false, normalizedForComparison, error: "Property names cannot contain control characters." };

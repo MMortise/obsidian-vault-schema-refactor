@@ -1,4 +1,5 @@
 import { sha256, stableStringify } from "../domain/hash";
+import { normalizePropertyNameForComparison } from "../domain/property-name";
 import type { Finding, InventoryResult, Severity } from "../domain/types";
 
 async function finding(ruleId: string, severity: Severity, filePath: string, message: string, options: Partial<Pick<Finding, "structuralPath" | "confidence" | "evidence" | "suggestedAction" | "refactorRequest">> = {}): Promise<Finding> {
@@ -33,12 +34,12 @@ export async function runDoctor(inventory: InventoryResult): Promise<Finding[]> 
   const names = [...properties].sort();
   const caseGroups = new Map<string, string[]>();
   for (const name of names) {
-    const normalized = name.normalize("NFC").toLocaleLowerCase();
+    const normalized = normalizePropertyNameForComparison(name);
     caseGroups.set(normalized, [...(caseGroups.get(normalized) ?? []), name]);
   }
   for (const group of caseGroups.values()) if (group.length > 1) {
-    const ordered = [...group].sort((a, b) => a.localeCompare(b));
-    const target = ordered.find((name) => name === name.toLocaleLowerCase()) ?? ordered[0];
+    const ordered = [...group].sort();
+    const target = ordered.find((name) => name === normalizePropertyNameForComparison(name)) ?? ordered[0];
     const source = ordered.find((name) => name !== target);
     findings.push(await finding("CASE_DRIFT", "warning", "", `Properties differ only by case: ${group.join(", ")}.`, {
       evidence: group.join(", "), suggestedAction: "create-refactor",
