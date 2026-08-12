@@ -1,27 +1,5 @@
 schema: spec-driven
 
 context: |
-  Product: Obsidian Vault Schema Refactor community plugin.
-  Core MVP: rename one top-level Frontmatter property across Markdown files and all exact Obsidian Bases references.
-  Modes: Refactor (write after review) and Doctor (read-only audit).
-  Stack: TypeScript with strict type checking, Obsidian public Plugin API, Vitest, real Obsidian E2E fixtures.
-  Privacy: fully local, no server, account, telemetry, API key, cloud AI, or required external service.
-  Safety: scan -> immutable plan -> diff -> confirm -> full snapshot -> write -> verify; rollback on failure and hash-safe undo.
-  Confidence: only exact structural references may be auto-modified. Probable/text matches are report-only.
-  Compatibility: core flows must not depend on undocumented Obsidian controllers, DOM selectors, Electron, or Node-only APIs.
-  Platform scope: Desktop supports the full MVP. Mobile MVP is read-only (Doctor, scan, review); write, rollback, and undo remain disabled until separately validated.
-  Product sources of truth: docs/product-spec.md, docs/technical-design.md, docs/competitive-audit.md, docs/test-plan.md.
-
-rules:
-  proposal:
-    - State the user-visible problem and why it belongs in this product.
-    - Include safety impact, public API impact, migration/rollback behavior, and explicit non-goals.
-    - Do not expand MVP beyond property rename unless the proposal includes new validation evidence.
-  specs:
-    - Use testable MUST/SHALL requirements and Given/When/Then scenarios.
-    - Cover plan freshness, conflict behavior, rollback, undo, unknown Base shapes, and low-confidence references when relevant.
-    - Core requirements must remain fully local and must not require undocumented Obsidian APIs.
-  tasks:
-    - Order read-only parsing and planning before any source-file write implementation.
-    - Include unit, fixture, integration, E2E, and failure-injection work for every write-path change.
-    - Do not mark a write-path task complete until rollback and divergent-file behavior are tested.
+  Obsidian community plugin for safe, local property-schema refactoring.
+  The core product contract is defined in openspec/specs/core/spec.md.
