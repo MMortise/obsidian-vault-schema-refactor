@@ -1,0 +1,32 @@
+filters:
+  and:
+    - note.status == "active"
+    - file.status != "archived"
+properties:
+  note.status:
+    displayName: Status
+formulas:
+  urgency: 'if(note.status == "blocked", 1, 0)'
+summaries:
+  active: 'values.filter(value, note.status == "active").length'
+views:
+  - type: table
+    name: Active projects
+    filters:
+      or:
+        - note.status == "active"
+        - note.owner == "me"
+    order:
+      - file.name
+      - note.status
+      - formula.urgency
+    sort:
+      - property: note.status
+        direction: ASC
+    groupBy:
+      property: note.status
+      direction: ASC
+    customPluginOption:
+      preserve: true
+x-community-field:
+  untouched: note.status

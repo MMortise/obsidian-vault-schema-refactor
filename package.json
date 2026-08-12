@@ -1,0 +1,33 @@
+{
+  "name": "obsidian-schema-refactor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Safe, local schema refactoring for Obsidian properties and Bases references.",
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "lint": "eslint src tests --max-warnings=0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "node scripts/performance-fixture.mjs",
+    "install:dev": "npm run build && node scripts/install-dev.mjs",
+    "check": "npm run lint && npm run test && npm run build"
+  },
+  "keywords": ["obsidian", "bases", "frontmatter", "refactor"],
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@types/node": "^24.2.1",
+    "esbuild": "^0.25.9",
+    "eslint": "^9.33.0",
+    "globals": "^16.3.0",
+    "obsidian": "^1.13.1",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.1",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "diff": "^8.0.2",
+    "yaml": "^2.8.1"
+  }
+}
