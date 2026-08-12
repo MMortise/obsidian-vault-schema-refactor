@@ -2,7 +2,7 @@ import { BASE_ADAPTER_VERSION, parseBase, renameBaseReferences } from "../adapte
 import { parseMarkdown, renameFrontmatterKey } from "../adapters/markdown-frontmatter-adapter";
 import { sha256, stableStringify } from "../domain/hash";
 import { validateRename } from "../domain/property-name";
-import type { BaseConflictDecision, ChangePlan, ConflictDecision, FileChange, Finding, InventoryResult, RenamePropertyRequest, SourceSnapshot } from "../domain/types";
+import type { BaseConflictDecision, ChangePlan, Confidence, ConflictDecision, FileChange, Finding, InventoryResult, RenamePropertyRequest, Severity, SourceSnapshot } from "../domain/types";
 
 function decisionFor(request: RenamePropertyRequest, path: string): ConflictDecision {
   return request.conflictDecisions?.[path] ?? request.defaultConflictDecision;
@@ -13,11 +13,11 @@ function baseDecisionFor(request: RenamePropertyRequest, path: string): BaseConf
   return decision === "keep-target" || decision === "keep-source" ? decision : "block";
 }
 
-async function planFinding(ruleId: string, path: string, message: string, evidence?: string): Promise<Finding> {
-  const fingerprint = await sha256(stableStringify({ ruleId, path, evidence }));
+async function planFinding(ruleId: string, path: string, message: string, evidence?: string, severity: Severity = "blocker", confidence: Confidence = "exact", structuralPath?: Array<string | number>): Promise<Finding> {
+  const fingerprint = await sha256(stableStringify({ ruleId, path, evidence, structuralPath }));
   return {
-    id: fingerprint.slice(0, 20), ruleId, severity: "blocker", filePath: path, confidence: "exact", message,
-    fingerprint, suggestedAction: "manual-review", ...(evidence ? { evidence } : {})
+    id: fingerprint.slice(0, 20), ruleId, severity, filePath: path, confidence, message,
+    fingerprint, suggestedAction: "manual-review", ...(evidence ? { evidence } : {}), ...(structuralPath ? { structuralPath } : {})
   };
 }
 
@@ -53,6 +53,14 @@ export async function buildRenamePlan(inventory: InventoryResult, input: RenameP
 
   for (const base of inventory.bases) {
     const oldReferences = base.references.filter((reference) => reference.propertyName === request.oldName && reference.confidence === "exact");
+    const reviewReferences = base.references.filter((reference) => reference.propertyName === request.oldName && reference.confidence !== "exact");
+    for (const reference of reviewReferences) {
+      unresolvedFindings.push(await planFinding(
+        "LOW_CONFIDENCE_REFERENCE", base.snapshot.path,
+        `A ${reference.confidence} reference to '${request.oldName}' requires manual review and will not be changed.`,
+        reference.evidence, "warning", reference.confidence, reference.structuralPath
+      ));
+    }
     const suspiciousText = base.snapshot.text.includes(request.oldName);
     if (base.parseError) {
       if (suspiciousText) unresolvedFindings.push(await planFinding("UNPARSEABLE_BASE", base.snapshot.path, "This Base may contain the old property but cannot be parsed.", base.parseError));
@@ -80,7 +88,7 @@ export async function buildRenamePlan(inventory: InventoryResult, input: RenameP
   }
   fileChanges.sort((a, b) => a.path.localeCompare(b.path));
   exclusions.sort((a, b) => a.path.localeCompare(b.path));
-  if (fileChanges.length === 0 && unresolvedFindings.length === 0) unresolvedFindings.push(await planFinding("EMPTY_PLAN", "", "No old property definitions or exact references were found."));
+  if (fileChanges.length === 0 && unresolvedFindings.length === 0) unresolvedFindings.push(await planFinding("EMPTY_PLAN", "", "No old property definitions or references were found."));
   const planSeed = { inventoryRevision: inventory.revision, adapterVersion: BASE_ADAPTER_VERSION, request, changes: fileChanges.map(({ path, beforeHash, afterHash, operations }) => ({ path, beforeHash, afterHash, operations })), exclusions };
   const planId = (await sha256(stableStringify(planSeed))).slice(0, 24);
   return {

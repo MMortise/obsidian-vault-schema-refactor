@@ -104,11 +104,13 @@ export class SchemaRefactorView extends ItemView {
     this.stat(stats, String(plan.fileChanges.filter((item) => item.kind === "markdown").length), "Markdown files");
     this.stat(stats, String(plan.fileChanges.filter((item) => item.kind === "base").length), "Base files");
     this.stat(stats, String(plan.fileChanges.reduce((sum, item) => sum + item.operations.length, 0)), "Exact changes");
-    this.stat(stats, String(plan.unresolvedFindings.length), "Blockers");
-    if (plan.unresolvedFindings.length > 0) {
+    const blockingFindings = plan.unresolvedFindings.filter((item) => item.severity === "blocker");
+    const reviewFindings = plan.unresolvedFindings.filter((item) => item.severity !== "blocker");
+    this.stat(stats, String(blockingFindings.length), "Blockers");
+    if (blockingFindings.length > 0) {
       const blockers = section.createDiv({ cls: "schema-refactor__blockers" });
       blockers.createEl("strong", { text: "Plan cannot be applied" });
-      plan.unresolvedFindings.forEach((item) => {
+      blockingFindings.forEach((item) => {
         const row = blockers.createDiv({ cls: "schema-refactor__blocker-row" });
         row.createEl("p", { text: `${item.filePath || "Request"}: ${item.message}` });
         if (item.filePath && (item.ruleId === "MARKDOWN_CONFLICT" || item.ruleId === "BASE_CONFLICT")) {
@@ -124,6 +126,13 @@ export class SchemaRefactorView extends ItemView {
           });
         }
       });
+    }
+    if (reviewFindings.length > 0) {
+      const review = section.createDiv({ cls: "schema-refactor__manual-review" });
+      review.createEl("strong", { text: `Manual review · ${reviewFindings.length}` });
+      reviewFindings.forEach((item) => review.createEl("p", {
+        text: `${item.filePath}${item.structuralPath ? ` > ${item.structuralPath.join(" > ")}` : ""}: ${item.message}${item.evidence ? ` (${item.evidence})` : ""}`
+      }));
     }
     const files = section.createDiv({ cls: "schema-refactor__files" });
     for (const change of plan.fileChanges) {

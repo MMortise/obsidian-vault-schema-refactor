@@ -99,4 +99,28 @@ describe("Plan builder", () => {
     const safePlan = await buildRenamePlan(unrelated, { oldName: "status", newName: "state", defaultConflictDecision: "block" });
     expect(safePlan.unresolvedFindings.some((item) => item.ruleId === "UNKNOWN_BASE_SHAPE")).toBe(false);
   });
+
+  it("carries probable references into a read-only reference-only review", async () => {
+    const data = await inventory({}, { "probable.base": "filters: status == \"active\"\n" });
+    const plan = await buildRenamePlan(data, { oldName: "status", newName: "state", defaultConflictDecision: "block" });
+    expect(plan.fileChanges).toEqual([]);
+    expect(plan.status).toBe("draft");
+    expect(plan.unresolvedFindings).toContainEqual(expect.objectContaining({
+      ruleId: "LOW_CONFIDENCE_REFERENCE", severity: "warning", confidence: "probable", filePath: "probable.base", evidence: "status"
+    }));
+    expect(plan.unresolvedFindings.some((item) => item.ruleId === "EMPTY_PLAN")).toBe(false);
+  });
+
+  it("keeps a mixed exact and probable plan ready while never writing the probable reference", async () => {
+    const data = await inventory(
+      { "project.md": "---\nstatus: active\n---\n" },
+      { "mixed.base": "filters:\n  and:\n    - note.status == \"active\"\n    - status == \"active\"\n" }
+    );
+    const plan = await buildRenamePlan(data, { oldName: "status", newName: "state", defaultConflictDecision: "block" });
+    expect(plan.status).toBe("ready");
+    expect(plan.unresolvedFindings).toContainEqual(expect.objectContaining({ ruleId: "LOW_CONFIDENCE_REFERENCE", confidence: "probable" }));
+    const baseChange = plan.fileChanges.find((change) => change.path === "mixed.base");
+    expect(baseChange?.afterText).toContain("note.state");
+    expect(baseChange?.afterText).toContain('- status == "active"');
+  });
 });

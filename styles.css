@@ -138,6 +138,8 @@
   padding: 8px 12px;
 }
 .schema-refactor__blockers p { color: var(--sr-muted); margin: 4px 0; }
+.schema-refactor__manual-review { border-left: 3px solid var(--color-yellow); margin: 12px 0; padding: 8px 12px; }
+.schema-refactor__manual-review p { color: var(--sr-muted); margin: 4px 0; overflow-wrap: anywhere; }
 .schema-refactor__blocker-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; }
 .schema-refactor__blocker-row p { flex: 1; min-width: min(280px, 100%); }
 
