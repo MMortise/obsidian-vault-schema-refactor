@@ -69,6 +69,7 @@ export const en = {
   transactionSummary: "{state} · {count} files · {date}",
   createUndoPlan: "Create undo plan",
   recoverTransaction: "Safely restore interrupted transaction",
+  restoreFiles: "Restore files",
   noFindings: "No findings in the current scan.",
   doctorEmpty: "Run Doctor to inspect Bases and property definitions.",
   errors: "Errors",
@@ -150,5 +151,6 @@ export const en = {
   includeTypeStats: "Include type statistics in JSON reports",
   includeTypeStatsHint: "Reports include only type names, never property values.",
   snapshotPrivacy: "Snapshots are stored under {path}. Schema Refactor does not send Vault data over the network.",
+  privacy: "Privacy",
   repository: "Code repository"
 } as const;

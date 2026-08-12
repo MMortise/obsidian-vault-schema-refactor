@@ -56,7 +56,7 @@ export class VaultInventory {
         }
         processed += 1;
         options.onProgress?.({ processed, total: files.length, definitions, exactReferences, warnings: errors.length });
-        if (processed % 25 === 0) await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        if (processed % 25 === 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       }
     };
     await Promise.all(Array.from({ length: Math.min(options.concurrency ?? 8, Math.max(1, files.length)) }, worker));

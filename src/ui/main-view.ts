@@ -8,6 +8,7 @@ import { ConfirmApplyModal } from "./confirm-modal";
 import type { TransactionManifest } from "../transaction/types";
 import { RefactorRequestState } from "./refactor-request-state";
 import { ApplyProgressModal } from "./apply-progress-modal";
+import { RecoveryConfirmModal } from "./recovery-confirm-modal";
 
 export const SCHEMA_REFACTOR_VIEW = "schema-refactor-view";
 type Tab = "refactor" | "doctor";
@@ -23,7 +24,7 @@ export class SchemaRefactorView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: SchemaRefactorPlugin) { super(leaf); }
   getViewType(): string { return SCHEMA_REFACTOR_VIEW; }
-  getDisplayText(): string { return "Schema Refactor"; }
+  getDisplayText(): string { return this.t("appName"); }
   getIcon(): string { return "scan-search"; }
   private get t(): Translate { return createTranslator(this.plugin.settings.language); }
 
@@ -158,9 +159,9 @@ export class SchemaRefactorView extends ItemView {
       const open = this.iconButton(summary, t("openSourceFile"), "file-search", false, true);
       open.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); void this.openFile(change.path); });
       const evidence = details.createDiv({ cls: "schema-refactor__evidence" });
-      change.operations.forEach((operation) => evidence.createEl("div", { text: `${operation.structuralPath.join(" > ") || t("frontmatter")}: ${operation.before} → ${operation.after}` }));
+      change.operations.forEach((operation) => evidence.createDiv({ text: `${operation.structuralPath.join(" > ") || t("frontmatter")}: ${operation.before} → ${operation.after}` }));
       const diff = details.createEl("pre", { cls: "schema-refactor__diff", attr: { tabindex: "0", "aria-label": t("diffFor", { path: change.path }) } });
-      for (const chunk of buildLineDiff(change)) diff.createEl("span", { cls: chunk.added ? "is-added" : chunk.removed ? "is-removed" : "", text: chunk.value });
+      for (const chunk of buildLineDiff(change)) diff.createSpan({ cls: chunk.added ? "is-added" : chunk.removed ? "is-removed" : "", text: chunk.value });
     }
     for (const exclusion of plan.exclusions) {
       const row = files.createDiv({ cls: "schema-refactor__excluded-file" });
@@ -222,7 +223,7 @@ export class SchemaRefactorView extends ItemView {
       setIcon(stateIcon, transaction.state === "COMPLETED" ? "circle-check" : transaction.state === "ROLLBACK_INCOMPLETE" ? "circle-alert" : "history");
       const copy = row.createDiv();
       copy.createEl("strong", { text: `${transaction.request.oldName} → ${transaction.request.newName}` });
-      copy.createEl("span", { text: t("transactionSummary", { state: transactionStateLabel(transaction.state, t), count: transaction.entries.length, date: new Date(transaction.createdAt).toLocaleString(this.plugin.settings.language) }) });
+      copy.createSpan({ text: t("transactionSummary", { state: transactionStateLabel(transaction.state, t), count: transaction.entries.length, date: new Date(transaction.createdAt).toLocaleString(this.plugin.settings.language) }) });
       if (transaction.state === "COMPLETED" && this.plugin.service.canWrite) {
         const undo = this.iconButton(row, t("createUndoPlan"), "undo-2", false, true);
         undo.addEventListener("click", () => void this.prepareUndo(transaction));
@@ -251,7 +252,7 @@ export class SchemaRefactorView extends ItemView {
         setIcon(icon, severity === "error" ? "circle-alert" : severity === "warning" ? "triangle-alert" : "info");
         const copy = row.createDiv();
         copy.createEl("strong", { text: findingMessage(item, t) });
-        copy.createEl("div", { cls: "schema-refactor__finding-meta", text: `${item.ruleId} · ${item.filePath || t("vault")}${item.structuralPath ? ` · ${item.structuralPath.join(" > ")}` : ""}` });
+        copy.createDiv({ cls: "schema-refactor__finding-meta", text: `${item.ruleId} · ${item.filePath || t("vault")}${item.structuralPath ? ` · ${item.structuralPath.join(" > ")}` : ""}` });
         if (item.suggestedAction === "create-refactor" && item.refactorRequest) {
           const refactor = this.iconButton(row, t("createRefactorPlan"), "replace", false, true);
           refactor.addEventListener("click", () => this.createRefactorFromFinding(item));
@@ -263,8 +264,8 @@ export class SchemaRefactorView extends ItemView {
 
   private field(parent: HTMLElement, label: string, description: string): HTMLLabelElement {
     const field = parent.createEl("label", { cls: "schema-refactor__field" });
-    field.createEl("span", { cls: "schema-refactor__label", text: label });
-    field.createEl("span", { cls: "schema-refactor__hint", text: description });
+    field.createSpan({ cls: "schema-refactor__label", text: label });
+    field.createSpan({ cls: "schema-refactor__hint", text: description });
     return field;
   }
 
@@ -353,7 +354,7 @@ export class SchemaRefactorView extends ItemView {
 
   private async recoverTransaction(transaction: TransactionManifest): Promise<void> {
     const t = this.t;
-    const confirmed = window.confirm(t("recoverConfirm", { id: transaction.transactionId }));
+    const confirmed = await new Promise<boolean>((resolve) => new RecoveryConfirmModal(this.app, transaction.transactionId, resolve, t).open());
     if (!confirmed) return;
     this.busy = true;
     this.requestState.resultMessage = t("checkingRecovery");

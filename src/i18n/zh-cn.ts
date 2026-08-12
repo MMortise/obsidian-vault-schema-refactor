@@ -71,6 +71,7 @@ export const zhCN = {
   transactionSummary: "{state} · {count} 个文件 · {date}",
   createUndoPlan: "创建撤销计划",
   recoverTransaction: "安全恢复中断的事务",
+  restoreFiles: "恢复文件",
   noFindings: "当前扫描没有发现问题。",
   doctorEmpty: "运行诊断以检查 Bases 和属性定义。",
   errors: "错误",
@@ -152,5 +153,6 @@ export const zhCN = {
   includeTypeStats: "在 JSON 报告中包含类型统计",
   includeTypeStatsHint: "报告只包含类型名称，永不包含属性值。",
   snapshotPrivacy: "快照存储在 {path}。Schema Refactor 不会通过网络发送 Vault 数据。",
+  privacy: "隐私",
   repository: "代码仓库"
 } as const satisfies Record<keyof typeof en, string>;

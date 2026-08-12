@@ -17,13 +17,11 @@ export default class SchemaRefactorPlugin extends Plugin {
     this.service = new SchemaRefactorService(this.app, this.manifest.id, () => this.settings);
     this.registerView(SCHEMA_REFACTOR_VIEW, (leaf) => new SchemaRefactorView(leaf, this));
     this.ribbonIcon = this.addRibbonIcon("scan-search", t("openApp"), () => void this.activateView());
-    this.openCommand = this.addCommand({ id: "open-schema-refactor", name: t("openApp"), callback: () => void this.activateView() });
+    this.openCommand = this.addCommand({ id: "open", name: t("openApp"), callback: () => void this.activateView() });
     this.doctorCommand = this.addCommand({ id: "run-doctor", name: t("runDoctorCommand"), callback: () => void this.runDoctor() });
     this.addSettingTab(new SchemaRefactorSettingTab(this.app, this));
     this.app.workspace.onLayoutReady(() => void this.recoverAndOptionallyScan());
   }
-
-  onunload(): void { this.app.workspace.detachLeavesOfType(SCHEMA_REFACTOR_VIEW); }
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<SchemaRefactorSettings> | null);

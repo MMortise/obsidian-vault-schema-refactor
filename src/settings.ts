@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, type SettingDefinitionItem } from "obsidian";
 import { createTranslator, normalizeLanguage, type Language } from "./i18n";
 import type SchemaRefactorPlugin from "./main";
 
@@ -23,49 +23,72 @@ export const DEFAULT_SETTINGS: SchemaRefactorSettings = {
 };
 
 export class SchemaRefactorSettingTab extends PluginSettingTab {
-  constructor(app: App, private readonly plugin: SchemaRefactorPlugin) { super(app, plugin); }
+  constructor(app: App, private readonly schemaPlugin: SchemaRefactorPlugin) { super(app, schemaPlugin); }
 
-  display(): void {
-    this.renderSettings();
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const t = createTranslator(this.schemaPlugin.settings.language);
+    return [
+      {
+        name: t("language"),
+        control: { type: "dropdown", key: "language", options: { en: t("english"), "zh-CN": t("simplifiedChinese") } }
+      },
+      {
+        name: t("snapshotRetention"),
+        desc: t("snapshotRetentionHint"),
+        control: { type: "slider", key: "snapshotRetention", min: 1, max: 100, step: 1, displayFormat: String }
+      },
+      {
+        name: t("scanAfterStartup"),
+        desc: t("scanAfterStartupHint"),
+        control: { type: "toggle", key: "scanOnStartup" }
+      },
+      {
+        name: t("showTextMatches"),
+        desc: t("showTextMatchesHint"),
+        control: { type: "toggle", key: "showTextMatches" }
+      },
+      {
+        name: t("lowResourceMode"),
+        desc: t("lowResourceModeHint"),
+        control: { type: "toggle", key: "lowResourceMode" }
+      },
+      {
+        name: t("includeTypeStats"),
+        desc: t("includeTypeStatsHint"),
+        control: { type: "toggle", key: "includeTypeStats" }
+      },
+      {
+        name: t("privacy"),
+        desc: t("snapshotPrivacy", { path: `${this.app.vault.configDir}/plugins/schema-refactor/snapshots` })
+      },
+      {
+        name: t("repository"),
+        render: (setting) => {
+          setting.descEl.createEl("a", { text: REPOSITORY_URL, href: REPOSITORY_URL, attr: { target: "_blank", rel: "noopener" } });
+        }
+      }
+    ];
   }
 
-  private renderSettings(): void {
-    const t = createTranslator(this.plugin.settings.language);
-    this.containerEl.empty();
-    this.containerEl.createEl("h2", { text: t("appName") });
-    new Setting(this.containerEl).setName(t("language")).addDropdown((dropdown) => dropdown
-      .addOption("en", t("english"))
-      .addOption("zh-CN", t("simplifiedChinese"))
-      .setValue(this.plugin.settings.language)
-      .onChange(async (value) => {
-        const saved = this.plugin.setLanguage(normalizeLanguage(value));
-        this.renderSettings();
-        await saved;
-      }));
-    const retention = new Setting(this.containerEl).setName(t("snapshotRetention")).setDesc(t("snapshotRetentionHint"));
-    retention.addSlider((slider) => {
-      slider.setLimits(1, 100, 1).setValue(this.plugin.settings.snapshotRetention);
-      const supportsInlineValue = typeof slider.setDisplayFormat === "function";
-      if (supportsInlineValue) slider.setDisplayFormat(String);
-      const fallbackValue = supportsInlineValue ? undefined : retention.controlEl.createEl("output", {
-        cls: "schema-refactor-setting-value",
-        text: String(this.plugin.settings.snapshotRetention),
-        attr: { "aria-live": "polite" }
-      });
-      slider.sliderEl.addEventListener("input", () => { if (fallbackValue) fallbackValue.textContent = slider.sliderEl.value; });
-      slider.onChange(async (nextValue) => {
-        if (fallbackValue) fallbackValue.textContent = String(nextValue);
-        this.plugin.settings.snapshotRetention = nextValue;
-        await this.plugin.saveSettings();
-      });
-    });
-    new Setting(this.containerEl).setName(t("scanAfterStartup")).setDesc(t("scanAfterStartupHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.scanOnStartup).onChange(async (value) => { this.plugin.settings.scanOnStartup = value; await this.plugin.saveSettings(); }));
-    new Setting(this.containerEl).setName(t("showTextMatches")).setDesc(t("showTextMatchesHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.showTextMatches).onChange(async (value) => { this.plugin.settings.showTextMatches = value; await this.plugin.saveSettings(); }));
-    new Setting(this.containerEl).setName(t("lowResourceMode")).setDesc(t("lowResourceModeHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.lowResourceMode).onChange(async (value) => { this.plugin.settings.lowResourceMode = value; await this.plugin.saveSettings(); }));
-    new Setting(this.containerEl).setName(t("includeTypeStats")).setDesc(t("includeTypeStatsHint")).addToggle((toggle) => toggle.setValue(this.plugin.settings.includeTypeStats).onChange(async (value) => { this.plugin.settings.includeTypeStats = value; await this.plugin.saveSettings(); }));
-    this.containerEl.createEl("p", { cls: "setting-item-description", text: t("snapshotPrivacy", { path: `${this.app.vault.configDir}/plugins/schema-refactor/snapshots` }) });
-    const repository = document.createDocumentFragment();
-    repository.createEl("a", { text: REPOSITORY_URL, href: REPOSITORY_URL, attr: { target: "_blank", rel: "noopener" } });
-    new Setting(this.containerEl).setName(t("repository")).setDesc(repository);
+  getControlValue(key: string): unknown {
+    return this.schemaPlugin.settings[key as keyof SchemaRefactorSettings];
+  }
+
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    if (key === "language") {
+      const saved = this.schemaPlugin.setLanguage(normalizeLanguage(value));
+      this.update();
+      await saved;
+      return;
+    }
+    switch (key) {
+      case "snapshotRetention": this.schemaPlugin.settings.snapshotRetention = Number(value); break;
+      case "scanOnStartup": this.schemaPlugin.settings.scanOnStartup = Boolean(value); break;
+      case "showTextMatches": this.schemaPlugin.settings.showTextMatches = Boolean(value); break;
+      case "lowResourceMode": this.schemaPlugin.settings.lowResourceMode = Boolean(value); break;
+      case "includeTypeStats": this.schemaPlugin.settings.includeTypeStats = Boolean(value); break;
+      default: return;
+    }
+    await this.schemaPlugin.saveSettings();
   }
 }

@@ -10,7 +10,7 @@ export class ConfirmApplyModal extends Modal {
     const { contentEl } = this;
     const summary = buildConfirmationSummary(this.plan, this.t);
     contentEl.addClass("schema-refactor-confirm");
-    contentEl.createEl("h2", { text: this.t("confirmTitle") });
+    this.setTitle(this.t("confirmTitle"));
     const facts = contentEl.createDiv({ cls: "schema-refactor-confirm__facts" });
     facts.createDiv({ text: this.t("filesWillChange", { count: summary.filesChanging }) });
     facts.createDiv({ text: this.t("excludedAndRetained", { files: summary.excludedFiles, references: summary.retainedReferences }) });
