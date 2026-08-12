@@ -37,6 +37,7 @@ export class TransactionExecutor {
         if (entry) entry.written = true;
         await this.snapshots.save(manifest);
         await hooks.injectFailure?.("after-write-intent", change.path);
+        if (await sha256(await this.files.read(change.path)) !== change.beforeHash) throw new Error(`File changed before write: ${change.path}`);
         await this.files.write(change.path, change.afterText);
         const writtenHash = await sha256(await this.files.read(change.path));
         if (entry) entry.writtenHash = writtenHash;
@@ -93,6 +94,12 @@ export class TransactionExecutor {
           continue;
         }
         const beforeText = await this.snapshots.readSnapshot(manifest.transactionId, entry);
+        await hooks.injectFailure?.("before-rollback-write", entry.path);
+        const guardedHash = await sha256(await this.files.read(entry.path));
+        if (guardedHash !== currentHash) {
+          incomplete.push(entry.path);
+          continue;
+        }
         await this.files.write(entry.path, beforeText);
         if (await sha256(await this.files.read(entry.path)) !== entry.beforeHash) throw new Error("Restored hash does not match snapshot.");
         entry.rollbackRestored = true;

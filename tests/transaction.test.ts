@@ -70,6 +70,19 @@ describe("TransactionExecutor", () => {
     expect(await files.read("a.md")).toBe(data.fileChanges[0]?.beforeText);
   });
 
+  it("does not overwrite an external edit after write intent is persisted", async () => {
+    const data = await plan();
+    const { files, executor } = setup(data);
+    const result = await executor.execute(data, {
+      injectFailure: async (point, path) => {
+        if (point === "after-write-intent" && path === "a.md") await files.write("a.md", "external edit");
+      }
+    });
+    expect(result.state).toBe("ROLLBACK_INCOMPLETE");
+    expect(result.rollbackIncompletePaths).toEqual(["a.md"]);
+    expect(await files.read("a.md")).toBe("external edit");
+  });
+
   it("does not overwrite an externally changed file during rollback", async () => {
     const data = await plan();
     const { files, executor } = setup(data);
@@ -84,6 +97,20 @@ describe("TransactionExecutor", () => {
     expect(result.state).toBe("ROLLBACK_INCOMPLETE");
     expect(result.rollbackIncompletePaths).toEqual(["a.md"]);
     expect(await files.read("a.md")).toBe("external edit");
+  });
+
+  it("does not overwrite an external edit arriving immediately before rollback write", async () => {
+    const data = await plan();
+    const { files, executor } = setup(data);
+    const result = await executor.execute(data, {
+      injectFailure: async (point, path) => {
+        if (point === "before-write" && path === "b.md") throw new Error("force rollback");
+        if (point === "before-rollback-write" && path === "a.md") await files.write("a.md", "external during rollback");
+      }
+    });
+    expect(result.state).toBe("ROLLBACK_INCOMPLETE");
+    expect(result.rollbackIncompletePaths).toEqual(["a.md"]);
+    expect(await files.read("a.md")).toBe("external during rollback");
   });
 
   it("restores a known corrupt write result", async () => {
