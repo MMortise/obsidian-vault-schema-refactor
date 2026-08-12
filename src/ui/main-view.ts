@@ -351,7 +351,10 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private async exportReport(extension: "md" | "json"): Promise<void> {
-    const report = createReport(this.plugin.service.findings, this.plugin.manifest.version);
+    const report = createReport(this.plugin.service.findings, this.plugin.manifest.version, new Date().toISOString(), {
+      includeTypeStats: extension === "json" && this.plugin.settings.includeTypeStats,
+      ...(this.plugin.service.inventory ? { propertyTypes: this.plugin.service.inventory.propertyTypes } : {})
+    });
     const stamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
     const path = `schema-refactor-report-${stamp}.${extension}`;
     await this.app.vault.create(path, extension === "md" ? reportToMarkdown(report) : reportToJson(report));

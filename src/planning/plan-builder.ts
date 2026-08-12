@@ -29,7 +29,8 @@ export async function buildRenamePlan(
   inventory: InventoryResult,
   input: RenamePropertyRequest,
   now = new Date().toISOString(),
-  readText?: (path: string) => Promise<string>
+  readText?: (path: string) => Promise<string>,
+  includeTextMatches = false
 ): Promise<ChangePlan> {
   const request: RenamePropertyRequest = {
     oldName: input.oldName, newName: input.newName, defaultConflictDecision: input.defaultConflictDecision,
@@ -69,7 +70,11 @@ export async function buildRenamePlan(
 
   for (const base of inventory.bases) {
     const oldReferences = base.references.filter((reference) => reference.propertyName === request.oldName && reference.confidence === "exact");
-    const reviewReferences = base.references.filter((reference) => reference.propertyName === request.oldName && reference.confidence !== "exact");
+    const reviewReferences = base.references.filter((reference) =>
+      reference.propertyName === request.oldName
+      && reference.confidence !== "exact"
+      && (reference.confidence !== "text" || includeTextMatches)
+    );
     for (const reference of reviewReferences) {
       unresolvedFindings.push(await planFinding(
         "LOW_CONFIDENCE_REFERENCE", base.snapshot.path,

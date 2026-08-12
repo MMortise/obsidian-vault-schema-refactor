@@ -1,4 +1,4 @@
-import type { Finding } from "../domain/types";
+import type { Finding, ValueKind } from "../domain/types";
 
 export interface DoctorReport {
   schemaVersion: 1;
@@ -6,9 +6,18 @@ export interface DoctorReport {
   generatedAt: string;
   summary: Record<"error" | "warning" | "info", number>;
   findings: Finding[];
+  propertyTypes?: Record<string, ValueKind[]>;
 }
 
-export function createReport(findings: Finding[], pluginVersion: string, generatedAt = new Date().toISOString()): DoctorReport {
+export interface ReportOptions {
+  includeTypeStats?: boolean;
+  propertyTypes?: Map<string, Set<ValueKind>>;
+}
+
+export function createReport(findings: Finding[], pluginVersion: string, generatedAt = new Date().toISOString(), options: ReportOptions = {}): DoctorReport {
+  const propertyTypes = options.includeTypeStats && options.propertyTypes
+    ? Object.fromEntries([...options.propertyTypes.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, kinds]) => [name, [...kinds].sort()]))
+    : undefined;
   return {
     schemaVersion: 1, pluginVersion, generatedAt,
     summary: {
@@ -16,7 +25,8 @@ export function createReport(findings: Finding[], pluginVersion: string, generat
       warning: findings.filter((item) => item.severity === "warning").length,
       info: findings.filter((item) => item.severity === "info").length
     },
-    findings
+    findings,
+    ...(propertyTypes ? { propertyTypes } : {})
   };
 }
 

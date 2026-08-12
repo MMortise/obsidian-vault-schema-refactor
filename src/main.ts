@@ -9,7 +9,7 @@ export default class SchemaRefactorPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.service = new SchemaRefactorService(this.app, this.manifest.id);
+    this.service = new SchemaRefactorService(this.app, this.manifest.id, () => this.settings);
     this.registerView(SCHEMA_REFACTOR_VIEW, (leaf) => new SchemaRefactorView(leaf, this));
     this.addRibbonIcon("scan-search", "Open Schema Refactor", () => void this.activateView());
     this.addCommand({ id: "open-schema-refactor", name: "Open Schema Refactor", callback: () => void this.activateView() });

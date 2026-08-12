@@ -10,6 +10,8 @@ import { buildRestorePlan, type RestorePlanResult } from "../transaction/restore
 import { SnapshotStore } from "../transaction/snapshot-store";
 import type { TransactionHooks, TransactionManifest, TransactionResult } from "../transaction/types";
 import { VaultFileStore } from "../transaction/vault-file-store";
+import type { SchemaRefactorSettings } from "../settings";
+import { resolveScanConcurrency } from "./settings-runtime";
 
 export class SchemaRefactorService {
   readonly snapshotStore: SnapshotStore;
@@ -19,7 +21,7 @@ export class SchemaRefactorService {
   findings: Finding[] = [];
   plan: ChangePlan | undefined;
 
-  constructor(private readonly app: App, pluginId: string) {
+  constructor(private readonly app: App, pluginId: string, private readonly getSettings: () => SchemaRefactorSettings) {
     this.fileStore = new VaultFileStore(app.vault);
     this.snapshotStore = new SnapshotStore(app.vault.adapter, `${app.vault.configDir}/plugins/${pluginId}/snapshots`);
     this.executor = new TransactionExecutor(this.fileStore, this.snapshotStore);
@@ -28,7 +30,10 @@ export class SchemaRefactorService {
   get canWrite(): boolean { return !Platform.isMobile; }
 
   async scan(onProgress?: (progress: ScanProgress) => void, signal?: AbortSignal): Promise<InventoryResult> {
-    this.inventory = await new VaultInventory(this.app.vault).scan({ ...(onProgress ? { onProgress } : {}), ...(signal ? { signal } : {}), concurrency: Platform.isMobile ? 2 : 8 });
+    this.inventory = await new VaultInventory(this.app.vault).scan({
+      ...(onProgress ? { onProgress } : {}), ...(signal ? { signal } : {}),
+      concurrency: resolveScanConcurrency(Platform.isMobile, this.getSettings().lowResourceMode)
+    });
     return this.inventory;
   }
 
@@ -44,7 +49,7 @@ export class SchemaRefactorService {
       const file = this.app.vault.getFileByPath(path);
       if (!file) throw new Error(`Vault file is missing: ${path}`);
       return this.app.vault.cachedRead(file);
-    });
+    }, this.getSettings().showTextMatches);
     return this.plan;
   }
 
