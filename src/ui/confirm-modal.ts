@@ -1,16 +1,19 @@
 import { Modal, setIcon } from "obsidian";
 import type { ChangePlan } from "../domain/types";
+import { buildConfirmationSummary } from "./confirmation-summary";
 
 export class ConfirmApplyModal extends Modal {
   constructor(app: ConstructorParameters<typeof Modal>[0], private readonly plan: ChangePlan, private readonly onConfirm: () => void) { super(app); }
 
   onOpen(): void {
     const { contentEl } = this;
+    const summary = buildConfirmationSummary(this.plan);
     contentEl.addClass("schema-refactor-confirm");
     contentEl.createEl("h2", { text: "Apply reviewed changes?" });
     const facts = contentEl.createDiv({ cls: "schema-refactor-confirm__facts" });
-    facts.createDiv({ text: `${this.plan.fileChanges.length} files will change` });
-    facts.createDiv({ text: `${this.plan.exclusions.length} files excluded` });
+    facts.createDiv({ text: `${summary.filesChanging} files will change` });
+    facts.createDiv({ text: `${summary.excludedFiles} files excluded; ${summary.retainedReferences} old definitions or references will remain` });
+    facts.createDiv({ text: `Conflict policy: ${summary.conflictPolicy}` });
     facts.createDiv({ text: "A local snapshot will be created first" });
     contentEl.createEl("p", { text: "Do not edit these files externally until verification finishes." });
     const actions = contentEl.createDiv({ cls: "modal-button-container" });
