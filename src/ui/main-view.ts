@@ -1,6 +1,7 @@
 import { ItemView, Notice, setIcon, type WorkspaceLeaf } from "obsidian";
 import type SchemaRefactorPlugin from "../main";
 import type { ChangePlan, ConflictDecision, Finding, ScanProgress } from "../domain/types";
+import { createTranslator, findingMessage, transactionStateLabel, type Translate } from "../i18n";
 import { buildLineDiff, diffSummary } from "../planning/diff-builder";
 import { createReport, reportToJson, reportToMarkdown } from "../report/report";
 import { ConfirmApplyModal } from "./confirm-modal";
@@ -24,20 +25,23 @@ export class SchemaRefactorView extends ItemView {
   getViewType(): string { return SCHEMA_REFACTOR_VIEW; }
   getDisplayText(): string { return "Schema Refactor"; }
   getIcon(): string { return "scan-search"; }
+  private get t(): Translate { return createTranslator(this.plugin.settings.language); }
 
   async onOpen(): Promise<void> { this.history = await this.plugin.service.history(); this.render(); }
+  refreshLanguage(): void { this.render(); }
 
   private render(): void {
+    const t = this.t;
     const root = this.contentEl;
     root.empty();
     root.addClass("schema-refactor");
     const header = root.createDiv({ cls: "schema-refactor__header" });
     const identity = header.createDiv();
-    identity.createEl("h1", { text: "Schema Refactor" });
-    identity.createEl("p", { text: "Review every property definition and Base reference before anything changes." });
+    identity.createEl("h1", { text: t("appName") });
+    identity.createEl("p", { text: t("headerTagline") });
     const tabs = header.createDiv({ cls: "schema-refactor__tabs", attr: { role: "tablist" } });
-    this.tabButton(tabs, "refactor", "Replace", "replace");
-    this.tabButton(tabs, "doctor", "Doctor", "stethoscope");
+    this.tabButton(tabs, "refactor", t("replace"), "replace");
+    this.tabButton(tabs, "doctor", t("doctor"), "stethoscope");
     const main = root.createDiv({ cls: "schema-refactor__main" });
     if (this.tab === "refactor") this.renderRefactor(main);
     else this.renderDoctor(main);
@@ -51,46 +55,48 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private renderRefactor(root: HTMLElement): void {
+    const t = this.t;
     this.renderSteps(root);
     const configure = root.createDiv({ cls: "schema-refactor__section" });
-    configure.createEl("h2", { text: "Property rename" });
+    configure.createEl("h2", { text: t("propertyRename") });
     const form = configure.createDiv({ cls: "schema-refactor__form" });
     const known = [...(this.plugin.service.inventory?.propertyTypes.keys() ?? [])].sort();
-    const oldField = this.field(form, "Old property", "Property currently used in the Vault");
+    const oldField = this.field(form, t("oldProperty"), t("oldPropertyHint"));
     const oldInput = oldField.createEl("input", { type: "text", value: this.requestState.oldName, attr: { list: "schema-refactor-properties", autocomplete: "off" } });
     const dataList = oldField.createEl("datalist", { attr: { id: "schema-refactor-properties" } });
     known.forEach((name) => dataList.createEl("option", { value: name }));
     oldInput.addEventListener("input", () => { this.requestState.setOldName(oldInput.value); this.plugin.service.plan = undefined; this.render(); });
-    const newField = this.field(form, "New property", "The target YAML property name");
+    const newField = this.field(form, t("newProperty"), t("newPropertyHint"));
     const newInput = newField.createEl("input", { type: "text", value: this.requestState.newName });
     newInput.addEventListener("input", () => { this.requestState.setNewName(newInput.value); this.plugin.service.plan = undefined; this.render(); });
-    const conflictField = this.field(form, "When both properties exist", "Choose a default; blocked files can be excluded during review");
+    const conflictField = this.field(form, t("conflictPrompt"), t("conflictHint"));
     const select = conflictField.createEl("select");
-    const conflictOptions: Array<[ConflictDecision, string]> = [["block", "Block and review"], ["keep-target", "Keep target value"], ["keep-source", "Keep source value"], ["merge-lists", "Merge lists only"]];
+    const conflictOptions: Array<[ConflictDecision, string]> = [["block", t("conflictBlock")], ["keep-target", t("conflictKeepTarget")], ["keep-source", t("conflictKeepSource")], ["merge-lists", t("conflictMergeLists")]];
     conflictOptions.forEach(([value, label]) => select.createEl("option", { value, text: label }));
     select.value = this.conflictDecision;
     select.addEventListener("change", () => { this.conflictDecision = select.value as ConflictDecision; });
-    const scopeField = this.field(form, "Scope", "Property references are global, so MVP plans always cover the whole Vault");
-    scopeField.createEl("input", { type: "text", value: "Entire Vault", attr: { disabled: "" } });
+    const scopeField = this.field(form, t("scope"), t("scopeHint"));
+    scopeField.createEl("input", { type: "text", value: t("entireVault"), attr: { disabled: "" } });
     const actions = configure.createDiv({ cls: "schema-refactor__actions" });
-    const scan = this.iconButton(actions, this.plugin.service.inventory ? "Rescan Vault" : "Scan Vault", "scan-search", true);
+    const scan = this.iconButton(actions, this.plugin.service.inventory ? t("rescanVault") : t("scanVault"), "scan-search", true);
     scan.disabled = this.busy;
     scan.addEventListener("click", () => void this.scanAndPlan());
     if (this.busy && this.scanController) {
-      const cancel = this.iconButton(actions, "Cancel scan", "square");
+      const cancel = this.iconButton(actions, t("cancelScan"), "square");
       cancel.addEventListener("click", () => this.scanController?.abort());
     }
-    if (this.progress) configure.createEl("p", { cls: "schema-refactor__progress", text: `${this.progress.processed} / ${this.progress.total} files · ${this.progress.exactReferences} exact references` });
+    if (this.progress) configure.createEl("p", { cls: "schema-refactor__progress", text: t("scanProgress", { processed: this.progress.processed, total: this.progress.total, references: this.progress.exactReferences }) });
     if (this.plugin.service.plan) this.renderPlan(root, this.plugin.service.plan);
     if (this.requestState.resultMessage) root.createDiv({ cls: "schema-refactor__result", text: this.requestState.resultMessage });
     this.renderHistory(root);
   }
 
   private renderSteps(root: HTMLElement): void {
+    const t = this.t;
     const hasInventory = this.plugin.service.inventory !== undefined;
     const hasPlan = this.plugin.service.plan !== undefined;
-    const steps = root.createDiv({ cls: "schema-refactor__steps", attr: { "aria-label": "Refactor progress" } });
-    ["Configure", "Scan", "Review", "Confirm", "Apply", "Verify"].forEach((label, index) => {
+    const steps = root.createDiv({ cls: "schema-refactor__steps", attr: { "aria-label": t("refactorProgress") } });
+    [t("stepConfigure"), t("stepScan"), t("stepReview"), t("stepConfirm"), t("stepApply"), t("stepVerify")].forEach((label, index) => {
       const complete = index === 0 || (index === 1 && hasInventory) || (index === 2 && hasPlan) || (index > 2 && this.requestState.resultMessage.length > 0);
       const item = steps.createDiv({ cls: complete ? "is-complete" : "" });
       item.createSpan({ cls: "schema-refactor__step-index", text: String(index + 1) });
@@ -99,26 +105,27 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private renderPlan(root: HTMLElement, plan: ChangePlan): void {
+    const t = this.t;
     const section = root.createDiv({ cls: "schema-refactor__section schema-refactor__review" });
-    section.createEl("h2", { text: "Review" });
+    section.createEl("h2", { text: t("review") });
     const stats = section.createDiv({ cls: "schema-refactor__stats" });
-    this.stat(stats, String(plan.fileChanges.filter((item) => item.kind === "markdown").length), "Markdown files");
-    this.stat(stats, String(plan.fileChanges.filter((item) => item.kind === "base").length), "Base files");
-    this.stat(stats, String(plan.fileChanges.reduce((sum, item) => sum + item.operations.length, 0)), "Exact changes");
+    this.stat(stats, String(plan.fileChanges.filter((item) => item.kind === "markdown").length), t("markdownFiles"));
+    this.stat(stats, String(plan.fileChanges.filter((item) => item.kind === "base").length), t("baseFiles"));
+    this.stat(stats, String(plan.fileChanges.reduce((sum, item) => sum + item.operations.length, 0)), t("exactChanges"));
     const blockingFindings = plan.unresolvedFindings.filter((item) => item.severity === "blocker");
     const reviewFindings = plan.unresolvedFindings.filter((item) => item.severity !== "blocker");
-    this.stat(stats, String(blockingFindings.length), "Blockers");
+    this.stat(stats, String(blockingFindings.length), t("blockers"));
     if (blockingFindings.length > 0) {
       const blockers = section.createDiv({ cls: "schema-refactor__blockers" });
-      blockers.createEl("strong", { text: "Plan cannot be applied" });
+      blockers.createEl("strong", { text: t("planCannotApply") });
       blockingFindings.forEach((item) => {
         const row = blockers.createDiv({ cls: "schema-refactor__blocker-row" });
-        row.createEl("p", { text: `${item.filePath || "Request"}: ${item.message}` });
+        row.createEl("p", { text: `${item.filePath || t("request")}: ${findingMessage(item, t)}` });
         if (item.filePath && (item.ruleId === "MARKDOWN_CONFLICT" || item.ruleId === "BASE_CONFLICT")) {
-          const select = row.createEl("select", { attr: { "aria-label": `Resolve conflict in ${item.filePath}` } });
+          const select = row.createEl("select", { attr: { "aria-label": t("resolveConflict", { path: item.filePath }) } });
           const choices: Array<[ConflictDecision | "exclude", string]> = item.ruleId === "BASE_CONFLICT"
-            ? [["block", "Choose action…"], ["keep-target", "Keep target"], ["keep-source", "Keep source"], ["exclude", "Exclude file"]]
-            : [["block", "Choose action…"], ["keep-target", "Keep target"], ["keep-source", "Keep source"], ["merge-lists", "Merge lists"], ["exclude", "Exclude file"]];
+            ? [["block", t("chooseAction")], ["keep-target", t("keepTarget")], ["keep-source", t("keepSource")], ["exclude", t("excludeFile")]]
+            : [["block", t("chooseAction")], ["keep-target", t("keepTarget")], ["keep-source", t("keepSource")], ["merge-lists", t("mergeLists")], ["exclude", t("excludeFile")]];
           choices.forEach(([value, label]) => select.createEl("option", { value, text: label }));
           select.addEventListener("change", () => {
             if (select.value === "exclude") this.requestState.excludedPaths.add(item.filePath);
@@ -130,16 +137,16 @@ export class SchemaRefactorView extends ItemView {
     }
     if (reviewFindings.length > 0) {
       const review = section.createDiv({ cls: "schema-refactor__manual-review" });
-      review.createEl("strong", { text: `Manual review · ${reviewFindings.length}` });
+      review.createEl("strong", { text: t("manualReview", { count: reviewFindings.length }) });
       reviewFindings.forEach((item) => review.createEl("p", {
-        text: `${item.filePath}${item.structuralPath ? ` > ${item.structuralPath.join(" > ")}` : ""}: ${item.message}${item.evidence ? ` (${item.evidence})` : ""}`
+        text: `${item.filePath}${item.structuralPath ? ` > ${item.structuralPath.join(" > ")}` : ""}: ${findingMessage(item, t)}${item.evidence ? ` (${item.evidence})` : ""}`
       }));
     }
     const files = section.createDiv({ cls: "schema-refactor__files" });
     for (const change of plan.fileChanges) {
       const details = files.createEl("details", { cls: "schema-refactor__file" });
       const summary = details.createEl("summary");
-      const checkbox = summary.createEl("input", { type: "checkbox", attr: { "aria-label": `Include ${change.path}` } });
+      const checkbox = summary.createEl("input", { type: "checkbox", attr: { "aria-label": t("includeFilePath", { path: change.path }) } });
       checkbox.checked = !this.requestState.excludedPaths.has(change.path);
       checkbox.disabled = plan.adapterVersion === "restore-v1";
       checkbox.addEventListener("click", (event) => event.stopPropagation());
@@ -147,64 +154,66 @@ export class SchemaRefactorView extends ItemView {
       const name = summary.createDiv({ cls: "schema-refactor__file-name" });
       name.createEl("strong", { text: change.path });
       const counts = diffSummary(change);
-      name.createSpan({ text: `${change.operations.length} changes · +${counts.additions} −${counts.deletions}` });
-      const open = this.iconButton(summary, "Open source file", "file-search", false, true);
+      name.createSpan({ text: t("changesCount", { count: change.operations.length, additions: counts.additions, deletions: counts.deletions }) });
+      const open = this.iconButton(summary, t("openSourceFile"), "file-search", false, true);
       open.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); void this.openFile(change.path); });
       const evidence = details.createDiv({ cls: "schema-refactor__evidence" });
-      change.operations.forEach((operation) => evidence.createEl("div", { text: `${operation.structuralPath.join(" > ") || "Frontmatter"}: ${operation.before} → ${operation.after}` }));
-      const diff = details.createEl("pre", { cls: "schema-refactor__diff", attr: { tabindex: "0", "aria-label": `Diff for ${change.path}` } });
+      change.operations.forEach((operation) => evidence.createEl("div", { text: `${operation.structuralPath.join(" > ") || t("frontmatter")}: ${operation.before} → ${operation.after}` }));
+      const diff = details.createEl("pre", { cls: "schema-refactor__diff", attr: { tabindex: "0", "aria-label": t("diffFor", { path: change.path }) } });
       for (const chunk of buildLineDiff(change)) diff.createEl("span", { cls: chunk.added ? "is-added" : chunk.removed ? "is-removed" : "", text: chunk.value });
     }
     for (const exclusion of plan.exclusions) {
       const row = files.createDiv({ cls: "schema-refactor__excluded-file" });
       const copy = row.createDiv();
       copy.createEl("strong", { text: exclusion.path });
-      copy.createSpan({ text: `${exclusion.remainingReferences} old definitions or references remain` });
+      copy.createSpan({ text: t("oldReferencesRemain", { count: exclusion.remainingReferences }) });
       if (plan.adapterVersion !== "restore-v1") {
-        const include = this.iconButton(row, "Include file", "plus", false, true);
+        const include = this.iconButton(row, t("includeFile"), "plus", false, true);
         include.addEventListener("click", () => { this.requestState.excludedPaths.delete(exclusion.path); void this.rebuildPlan(); });
       }
     }
     const footer = section.createDiv({ cls: "schema-refactor__review-footer" });
-    footer.createEl("p", { text: `${plan.exclusions.length} excluded files leave ${plan.exclusions.reduce((sum, item) => sum + item.remainingReferences, 0)} old definitions or references.` });
+    footer.createEl("p", { text: t("exclusionsSummary", { files: plan.exclusions.length, references: plan.exclusions.reduce((sum, item) => sum + item.remainingReferences, 0) }) });
     if (plan.status === "ready" && this.plugin.service.canWrite) {
-      const apply = this.iconButton(footer, "Review and apply", "play", true);
+      const apply = this.iconButton(footer, t("reviewAndApply"), "play", true);
       apply.disabled = this.busy;
-      apply.addEventListener("click", () => new ConfirmApplyModal(this.app, plan, () => void this.applyPlan(plan)).open());
-    } else if (!this.plugin.service.canWrite) footer.createEl("p", { cls: "schema-refactor__mobile-note", text: "Apply, rollback, and undo are disabled on mobile in this release." });
+      apply.addEventListener("click", () => new ConfirmApplyModal(this.app, plan, () => void this.applyPlan(plan), t).open());
+    } else if (!this.plugin.service.canWrite) footer.createEl("p", { cls: "schema-refactor__mobile-note", text: t("mobileWritesDisabled") });
   }
 
   private renderDoctor(root: HTMLElement): void {
+    const t = this.t;
     const toolbar = root.createDiv({ cls: "schema-refactor__doctor-toolbar" });
     const heading = toolbar.createDiv();
-    heading.createEl("h2", { text: "Vault health" });
-    heading.createEl("p", { text: "Read-only checks for broken Base references and schema drift." });
+    heading.createEl("h2", { text: t("vaultHealth") });
+    heading.createEl("p", { text: t("vaultHealthHint") });
     const actions = toolbar.createDiv({ cls: "schema-refactor__actions" });
-    const scan = this.iconButton(actions, "Run Doctor", "scan-search", true);
+    const scan = this.iconButton(actions, t("runDoctor"), "scan-search", true);
     scan.disabled = this.busy;
     scan.addEventListener("click", () => void this.runDoctor());
     if (this.busy && this.scanController) {
-      const cancel = this.iconButton(actions, "Cancel scan", "square");
+      const cancel = this.iconButton(actions, t("cancelScan"), "square");
       cancel.addEventListener("click", () => this.scanController?.abort());
     }
     if (this.plugin.service.findings.length > 0) {
-      const exportMd = this.iconButton(actions, "Export Markdown", "file-down");
+      const exportMd = this.iconButton(actions, t("exportMarkdown"), "file-down");
       exportMd.addEventListener("click", () => void this.exportReport("md"));
-      const exportJson = this.iconButton(actions, "Export JSON", "braces");
+      const exportJson = this.iconButton(actions, t("exportJson"), "braces");
       exportJson.addEventListener("click", () => void this.exportReport("json"));
     }
-    if (this.progress) root.createEl("p", { cls: "schema-refactor__progress", text: `${this.progress.processed} / ${this.progress.total} files checked` });
+    if (this.progress) root.createEl("p", { cls: "schema-refactor__progress", text: t("doctorProgress", { processed: this.progress.processed, total: this.progress.total }) });
     this.renderFindings(root, this.plugin.service.findings);
   }
 
   private renderHistory(root: HTMLElement): void {
+    const t = this.t;
     const section = root.createDiv({ cls: "schema-refactor__section schema-refactor__history" });
     const title = section.createDiv({ cls: "schema-refactor__section-title" });
-    title.createEl("h2", { text: "History" });
-    const refresh = this.iconButton(title, "Refresh history", "refresh-cw", false, true);
+    title.createEl("h2", { text: t("history") });
+    const refresh = this.iconButton(title, t("refreshHistory"), "refresh-cw", false, true);
     refresh.addEventListener("click", () => void this.refreshHistory());
     if (this.history.length === 0) {
-      section.createEl("p", { cls: "schema-refactor__muted", text: "Completed and interrupted transactions will appear here." });
+      section.createEl("p", { cls: "schema-refactor__muted", text: t("historyEmpty") });
       return;
     }
     for (const transaction of this.history.slice(0, 20)) {
@@ -213,23 +222,24 @@ export class SchemaRefactorView extends ItemView {
       setIcon(stateIcon, transaction.state === "COMPLETED" ? "circle-check" : transaction.state === "ROLLBACK_INCOMPLETE" ? "circle-alert" : "history");
       const copy = row.createDiv();
       copy.createEl("strong", { text: `${transaction.request.oldName} → ${transaction.request.newName}` });
-      copy.createEl("span", { text: `${transaction.state.replaceAll("_", " ")} · ${transaction.entries.length} files · ${new Date(transaction.createdAt).toLocaleString()}` });
+      copy.createEl("span", { text: t("transactionSummary", { state: transactionStateLabel(transaction.state, t), count: transaction.entries.length, date: new Date(transaction.createdAt).toLocaleString(this.plugin.settings.language) }) });
       if (transaction.state === "COMPLETED" && this.plugin.service.canWrite) {
-        const undo = this.iconButton(row, "Create undo plan", "undo-2", false, true);
+        const undo = this.iconButton(row, t("createUndoPlan"), "undo-2", false, true);
         undo.addEventListener("click", () => void this.prepareUndo(transaction));
       } else if (!["ROLLED_BACK", "ROLLBACK_INCOMPLETE", "CANCELLED"].includes(transaction.state) && this.plugin.service.canWrite) {
-        const recover = this.iconButton(row, "Safely restore interrupted transaction", "rotate-ccw", false, true);
+        const recover = this.iconButton(row, t("recoverTransaction"), "rotate-ccw", false, true);
         recover.addEventListener("click", () => void this.recoverTransaction(transaction));
       }
     }
   }
 
   private renderFindings(root: HTMLElement, findings: Finding[]): void {
+    const t = this.t;
     if (findings.length === 0) {
-      root.createDiv({ cls: "schema-refactor__empty", text: this.plugin.service.inventory ? "No findings in the current scan." : "Run Doctor to inspect Bases and property definitions." });
+      root.createDiv({ cls: "schema-refactor__empty", text: this.plugin.service.inventory ? t("noFindings") : t("doctorEmpty") });
       return;
     }
-    const groups: Array<[Finding["severity"], string]> = [["error", "Errors"], ["warning", "Warnings"], ["info", "Information"]];
+    const groups: Array<[Finding["severity"], string]> = [["error", t("errors")], ["warning", t("warnings")], ["info", t("information")]];
     for (const [severity, label] of groups) {
       const items = findings.filter((item) => item.severity === severity);
       if (items.length === 0) continue;
@@ -240,13 +250,13 @@ export class SchemaRefactorView extends ItemView {
         const icon = row.createSpan({ cls: "schema-refactor__finding-icon", attr: { "aria-label": severity } });
         setIcon(icon, severity === "error" ? "circle-alert" : severity === "warning" ? "triangle-alert" : "info");
         const copy = row.createDiv();
-        copy.createEl("strong", { text: item.message });
-        copy.createEl("div", { cls: "schema-refactor__finding-meta", text: `${item.ruleId} · ${item.filePath || "Vault"}${item.structuralPath ? ` · ${item.structuralPath.join(" > ")}` : ""}` });
+        copy.createEl("strong", { text: findingMessage(item, t) });
+        copy.createEl("div", { cls: "schema-refactor__finding-meta", text: `${item.ruleId} · ${item.filePath || t("vault")}${item.structuralPath ? ` · ${item.structuralPath.join(" > ")}` : ""}` });
         if (item.suggestedAction === "create-refactor" && item.refactorRequest) {
-          const refactor = this.iconButton(row, "Create refactor plan", "replace", false, true);
+          const refactor = this.iconButton(row, t("createRefactorPlan"), "replace", false, true);
           refactor.addEventListener("click", () => this.createRefactorFromFinding(item));
         }
-        if (item.filePath) { const open = this.iconButton(row, "Open file", "external-link", false, true); open.addEventListener("click", () => void this.openFile(item.filePath)); }
+        if (item.filePath) { const open = this.iconButton(row, t("openFile"), "external-link", false, true); open.addEventListener("click", () => void this.openFile(item.filePath)); }
       }
     }
   }
@@ -273,12 +283,13 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private async scanAndPlan(): Promise<void> {
-    if (!this.requestState.oldName || !this.requestState.newName) { new Notice("Enter both property names before scanning."); return; }
+    const t = this.t;
+    if (!this.requestState.oldName || !this.requestState.newName) { new Notice(t("enterPropertyNames")); return; }
     this.busy = true; this.progress = undefined; this.requestState.resultMessage = ""; this.scanController = new AbortController(); this.render();
     try {
       await this.plugin.service.scan((progress) => { this.progress = progress; if (progress.processed === progress.total || progress.processed % 50 === 0) this.render(); }, this.scanController.signal);
       await this.rebuildPlan(false);
-    } catch (error) { new Notice(error instanceof DOMException && error.name === "AbortError" ? "Scan cancelled. No files were changed." : error instanceof Error ? error.message : "Scan failed."); }
+    } catch (error) { new Notice(error instanceof DOMException && error.name === "AbortError" ? t("scanCancelled") : error instanceof Error ? error.message : t("scanFailed")); }
     finally { this.busy = false; this.scanController = undefined; this.render(); }
   }
 
@@ -289,21 +300,26 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private async applyPlan(plan: ChangePlan): Promise<void> {
-    const progressModal = new ApplyProgressModal(this.app);
+    const t = this.t;
+    const progressModal = new ApplyProgressModal(this.app, t);
     progressModal.open();
-    this.busy = true; this.requestState.resultMessage = "Preparing transaction…"; this.render();
+    this.busy = true; this.requestState.resultMessage = t("preparingTransaction"); this.render();
     try {
       const result = await this.plugin.service.apply(plan, { onState: (state, path) => {
         progressModal.update(state, path);
-        this.requestState.resultMessage = `${state.replaceAll("_", " ")}${path ? ` · ${path}` : ""}`;
+        this.requestState.resultMessage = `${transactionStateLabel(state, t)}${path ? ` · ${path}` : ""}`;
         this.render();
       } });
-      this.requestState.resultMessage = result.state === "COMPLETED" ? `Completed and verified ${result.modifiedPaths.length} files.` : result.state === "ROLLED_BACK" ? "Apply failed. All changed files were restored." : `Rollback incomplete: ${result.rollbackIncompletePaths.join(", ")}. Snapshots were retained.`;
+      this.requestState.resultMessage = result.state === "COMPLETED"
+        ? t("completedFiles", { count: result.modifiedPaths.length })
+        : result.state === "ROLLED_BACK"
+          ? t("applyRolledBack")
+          : t("rollbackIncomplete", { paths: result.rollbackIncompletePaths.join(", ") });
       this.history = await this.plugin.service.history();
       await this.plugin.service.pruneHistory(this.plugin.settings.snapshotRetention);
       new Notice(this.requestState.resultMessage, 8000);
     } catch (error) {
-      this.requestState.resultMessage = error instanceof Error ? error.message : "Apply failed.";
+      this.requestState.resultMessage = error instanceof Error ? error.message : t("applyFailed");
       progressModal.fail(this.requestState.resultMessage);
       new Notice(this.requestState.resultMessage, 8000);
     }
@@ -311,6 +327,7 @@ export class SchemaRefactorView extends ItemView {
   }
 
   private async prepareUndo(transaction: TransactionManifest): Promise<void> {
+    const t = this.t;
     try {
       const result = await this.plugin.service.createRestorePlan(transaction);
       this.requestState.oldName = result.plan.request.oldName;
@@ -318,39 +335,41 @@ export class SchemaRefactorView extends ItemView {
       this.requestState.excludedPaths = new Set(result.plan.request.excludedPaths ?? []);
       this.requestState.setReviewedPlan(result.plan);
       this.requestState.resultMessage = [...result.divergedPaths, ...result.missingPaths].length > 0
-        ? `Undo plan excludes changed or missing files: ${[...result.divergedPaths, ...result.missingPaths].join(", ")}.`
-        : "Undo plan is ready for review.";
+        ? t("undoExcludesFiles", { paths: [...result.divergedPaths, ...result.missingPaths].join(", ") })
+        : t("undoReady");
       this.render();
-    } catch (error) { new Notice(error instanceof Error ? error.message : "Could not create undo plan."); }
+    } catch (error) { new Notice(error instanceof Error ? error.message : t("undoFailed")); }
   }
 
   private async refreshHistory(): Promise<void> { this.history = await this.plugin.service.history(); this.render(); }
 
   private async recoverTransaction(transaction: TransactionManifest): Promise<void> {
-    const confirmed = window.confirm(`Restore files written by interrupted transaction ${transaction.transactionId}? Files changed externally will not be overwritten.`);
+    const t = this.t;
+    const confirmed = window.confirm(t("recoverConfirm", { id: transaction.transactionId }));
     if (!confirmed) return;
     this.busy = true;
-    this.requestState.resultMessage = "Checking interrupted transaction…";
+    this.requestState.resultMessage = t("checkingRecovery");
     this.render();
     try {
       const result = await this.plugin.service.recoverTransaction(transaction);
       this.requestState.resultMessage = result?.state === "ROLLED_BACK"
-        ? "Interrupted transaction was safely restored."
+        ? t("recoveryComplete")
         : result?.state === "ROLLBACK_INCOMPLETE"
-          ? `Recovery incomplete: ${result.rollbackIncompletePaths.join(", ")}. Snapshots were retained.`
-          : "This transaction no longer requires recovery.";
+          ? t("recoveryIncomplete", { paths: result.rollbackIncompletePaths.join(", ") })
+          : t("recoveryNotRequired");
       this.history = await this.plugin.service.history();
       new Notice(this.requestState.resultMessage, 10000);
     } catch (error) {
-      this.requestState.resultMessage = error instanceof Error ? error.message : "Recovery failed.";
+      this.requestState.resultMessage = error instanceof Error ? error.message : t("recoveryFailed");
       new Notice(this.requestState.resultMessage, 10000);
     } finally { this.busy = false; this.render(); }
   }
 
   private async runDoctor(): Promise<void> {
+    const t = this.t;
     this.busy = true; this.progress = undefined; this.scanController = new AbortController(); this.render();
     try { await this.plugin.service.doctor((progress) => { this.progress = progress; if (progress.processed === progress.total || progress.processed % 50 === 0) this.render(); }, this.scanController.signal); }
-    catch (error) { new Notice(error instanceof DOMException && error.name === "AbortError" ? "Doctor scan cancelled." : error instanceof Error ? error.message : "Doctor scan failed."); }
+    catch (error) { new Notice(error instanceof DOMException && error.name === "AbortError" ? t("doctorCancelled") : error instanceof Error ? error.message : t("doctorFailed")); }
     finally { this.busy = false; this.scanController = undefined; this.render(); }
   }
 
@@ -362,12 +381,12 @@ export class SchemaRefactorView extends ItemView {
     const stamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
     const path = `schema-refactor-report-${stamp}.${extension}`;
     await this.app.vault.create(path, extension === "md" ? reportToMarkdown(report) : reportToJson(report));
-    new Notice(`Created ${path}`);
+    new Notice(this.t("reportCreated", { path }));
   }
 
   private async openFile(path: string): Promise<void> {
     const file = this.app.vault.getFileByPath(path);
-    if (!file) { new Notice(`File not found: ${path}`); return; }
+    if (!file) { new Notice(this.t("fileNotFound", { path })); return; }
     await this.app.workspace.getLeaf(false).openFile(file);
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-schema-refactor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Safe, local schema refactoring for Obsidian properties and Bases references.",
   "scripts": {
@@ -29,5 +29,10 @@
   "dependencies": {
     "diff": "^8.0.2",
     "yaml": "^2.8.1"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
   }
 }

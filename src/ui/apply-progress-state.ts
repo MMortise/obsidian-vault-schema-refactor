@@ -1,17 +1,22 @@
 import type { TransactionState } from "../transaction/types";
+import { createTranslator, transactionStateLabel, type Translate } from "../i18n";
 
 const TERMINAL_STATES = new Set<TransactionState>(["COMPLETED", "ROLLED_BACK", "ROLLBACK_INCOMPLETE"]);
 
 export class ApplyProgressState {
   state: TransactionState = "PREPARING";
   path: string | undefined;
-  message = "Preparing transaction";
+  message: string;
   terminal = false;
+
+  constructor(private readonly t: Translate = createTranslator("en")) {
+    this.message = this.t("statePreparing");
+  }
 
   update(state: TransactionState, path?: string): void {
     this.state = state;
     this.path = path;
-    this.message = state.replaceAll("_", " ").toLocaleLowerCase();
+    this.message = transactionStateLabel(state, this.t);
     this.terminal = TERMINAL_STATES.has(state);
   }
 

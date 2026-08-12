@@ -1,9 +1,15 @@
 import { Modal, setIcon } from "obsidian";
+import { createTranslator, type Translate } from "../i18n";
 import type { TransactionState } from "../transaction/types";
 import { ApplyProgressState } from "./apply-progress-state";
 
 export class ApplyProgressModal extends Modal {
-  readonly progress = new ApplyProgressState();
+  readonly progress: ApplyProgressState;
+
+  constructor(app: ConstructorParameters<typeof Modal>[0], private readonly t: Translate = createTranslator("en")) {
+    super(app);
+    this.progress = new ApplyProgressState(t);
+  }
 
   onOpen(): void {
     this.modalEl.addClass("schema-refactor-progress-modal");
@@ -26,17 +32,17 @@ export class ApplyProgressModal extends Modal {
 
   private render(): void {
     this.contentEl.empty();
-    this.contentEl.createEl("h2", { text: this.progress.terminal ? "Transaction finished" : "Applying reviewed changes" });
+    this.contentEl.createEl("h2", { text: this.progress.terminal ? this.t("transactionFinished") : this.t("applyingChanges") });
     const status = this.contentEl.createDiv({ cls: "schema-refactor-progress-modal__status", attr: { role: "status", "aria-live": "polite" } });
     const icon = status.createSpan();
     setIcon(icon, this.progress.terminal ? (this.progress.state === "COMPLETED" ? "circle-check" : "circle-alert") : "loader-circle");
     const copy = status.createDiv();
     copy.createEl("strong", { text: this.progress.message });
     if (this.progress.path) copy.createEl("span", { text: this.progress.path });
-    if (!this.progress.terminal) this.contentEl.createEl("p", { text: "Keep Obsidian open. This window will remain until verification or rollback finishes." });
+    if (!this.progress.terminal) this.contentEl.createEl("p", { text: this.t("keepObsidianOpen") });
     else {
       const actions = this.contentEl.createDiv({ cls: "modal-button-container" });
-      actions.createEl("button", { cls: "mod-cta", text: "Close" }).addEventListener("click", () => this.close());
+      actions.createEl("button", { cls: "mod-cta", text: this.t("close") }).addEventListener("click", () => this.close());
     }
   }
 }
