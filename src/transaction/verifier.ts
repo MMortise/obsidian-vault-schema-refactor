@@ -11,15 +11,18 @@ export async function verifyPlanApplied(files: TransactionFileStore, plan: Chang
     const hash = await sha256(text);
     if (hash !== change.afterHash) { errors.push(`${change.path}: written bytes differ from the reviewed plan`); continue; }
     const snapshot: SourceSnapshot = { path: change.path, kind: change.kind, text, contentHash: hash, mtime: 0, size: text.length };
+    const isRestore = plan.adapterVersion === "restore-v1";
     if (change.kind === "markdown") {
       const parsed = await parseMarkdown(snapshot);
       if (parsed.parseError) errors.push(`${change.path}: ${parsed.parseError}`);
-      if (parsed.properties.has(plan.request.oldName)) errors.push(`${change.path}: old property remains`);
-      if (!parsed.properties.has(plan.request.newName)) errors.push(`${change.path}: new property is missing`);
+      if (!isRestore) {
+        if (parsed.properties.has(plan.request.oldName)) errors.push(`${change.path}: old property remains`);
+        if (!parsed.properties.has(plan.request.newName)) errors.push(`${change.path}: new property is missing`);
+      }
     } else {
       const parsed = await parseBase(snapshot);
       if (parsed.parseError) errors.push(`${change.path}: ${parsed.parseError}`);
-      if (parsed.references.some((reference) => reference.confidence === "exact" && reference.propertyName === plan.request.oldName)) errors.push(`${change.path}: exact old references remain`);
+      if (!isRestore && parsed.references.some((reference) => reference.confidence === "exact" && reference.propertyName === plan.request.oldName)) errors.push(`${change.path}: exact old references remain`);
     }
   }
   return errors;

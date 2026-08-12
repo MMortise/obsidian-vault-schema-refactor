@@ -4,6 +4,7 @@ import { sha256 } from "../src/domain/hash";
 import { buildRestorePlan } from "../src/transaction/restore-plan";
 import { SnapshotStore } from "../src/transaction/snapshot-store";
 import type { TransactionFileStore, TransactionManifest } from "../src/transaction/types";
+import { verifyPlanApplied } from "../src/transaction/verifier";
 
 class Files implements TransactionFileStore {
   values = new Map<string, string>();
@@ -38,5 +39,27 @@ describe("restore plan", () => {
     expect(result.plan.fileChanges.map((item) => item.path)).toEqual(["a.md"]);
     expect(result.divergedPaths).toEqual(["b.md"]);
     expect(result.plan.fileChanges[0]?.afterText).toBe(beforeA);
+  });
+
+  it("accepts a reviewed restore snapshot that legitimately contains both property names", async () => {
+    const restored = "---\nstatus: source\nstate: target\n---\n";
+    const current = "---\nstate: source\n---\n";
+    const files = new Files();
+    files.values.set("conflict.md", restored);
+    const plan = {
+      schemaVersion: 1 as const,
+      planId: "restore-plan",
+      inventoryRevision: "restore-plan",
+      adapterVersion: "restore-v1",
+      createdAt: "2026-08-12T00:00:00Z",
+      request: { oldName: "state", newName: "status", defaultConflictDecision: "block" as const },
+      sourceSnapshots: { "conflict.md": { contentHash: await sha256(current), mtime: 0, size: current.length } },
+      fileChanges: [{
+        path: "conflict.md", kind: "markdown" as const, beforeHash: await sha256(current), beforeText: current,
+        afterText: restored, afterHash: await sha256(restored), operations: [], validation: { valid: true, warnings: [], blockers: [] }
+      }],
+      unresolvedFindings: [], exclusions: [], status: "ready" as const
+    };
+    expect(await verifyPlanApplied(files, plan)).toEqual([]);
   });
 });
